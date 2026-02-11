@@ -35,18 +35,11 @@ jobs:
 
           echo "API response: ${RESP}"
 
-          # Extrahera id i ett robust pythonblock
-          CONSOLE_ID="$(python - <<'PY' <<< "${RESP}"
-          import sys, json
-          data = json.loads(sys.stdin.read())
-          cid = data.get("id")
-          if not cid:
-              raise SystemExit("No console id in response")
-          print(cid)
-          PY
-          )"
-
-          echo "CONSOLE_ID=${CONSOLE_ID}"
+          CONSOLE_ID="$(echo "${RESP}" | jq -r '.id // empty')"
+          if [ -z "$CONSOLE_ID" ]; then
+            echo "::error::No console id in response"
+            exit 1
+          fi
           echo "CONSOLE_ID=${CONSOLE_ID}" >> "$GITHUB_ENV"
 
       # 2) Kör git-kommando inne i konsolen via send_input (JSON + newline)
