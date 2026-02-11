@@ -3,7 +3,6 @@ app = Flask(__name__)
 app.secret_key = "Silmantra!"
 
 @app.route("/")
-
 def index():
     count = session.get("count", 0)
     count += 1
