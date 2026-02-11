@@ -1,0 +1,111 @@
+name: Auto-deploy to PythonAnywhere (git pull + reload)
+
+on:
+  push:
+    branches: [ "main" ]   # ändra om du byter branch i framtiden
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PA_HOST: ${{ secrets.PA_HOST }}
+      PA_USERNAME: ${{ secrets.PA_USERNAME }}
+      PA_DOMAIN: ${{ secrets.PA_DOMAIN }}
+      PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+      PA_REPO_DIR: ${{ secrets.PA_REPO_DIR }}
+      PA_BRANCH: ${{ secrets.PA_BRANCH }}
+
+    steps:
+      - name: Checkout (valfritt)
+        uses: actions/checkout@v4
+
+      - name: Create Bash console on PythonAnywhere (API)
+        id: create_console
+        run: |
+          # Skapa en Bash-konsol
+          RESP=$(curl -sS -X POST \
+            -H "Authorization: Token ${PA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"executable":"bash"}' \
+            "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/consoles/")
+
+          echo "API response: $RESP"
+
+          # Extrahera console_id robust utan jq (via python)
+          echo "$RESP" | python - <<'PY'
+import sys, json
+data=json.load(sys.stdin)
+cid=data.get("id") if isinstance(data, dict) else None
+if not cid:
+    raise SystemExit("Could not create console; response had no 'id'")
+print(f"CONSOLE_ID={cid}")
+PY
+        shell: bash
+
+      - name: Export console id to env
+        run: echo "${{ steps.create_console.outputs.CONSOLE_ID }}" || true
+        shell: bash
+        # Använd GITHUB_OUTPUT på steget ovan istället:
+      - name: Save console id (workaround)
+        run: |
+          # Hämta omvärldsvärdet från förra steget via python igen (förenkling):
+          echo "${{ steps.create_console.outputs.CONSOLE_ID }}" > /tmp/cid.txt || true
+          # Alternativ: hämta direkt från API-responsen i föregående steg
+
+      - name: Load console id into $GITHUB_ENV
+        run: |
+          # (Om du föredrar, kan du istället parsa i samma steg som create_console.)
+          # Här antar vi att vi sparade CONSOLE_ID på stdout i föregående steg;
+          # enklare är att göra allt i ett steg – se "kompakt variant" nedan.
+          :
+        shell: bash
+
+      - name: Git fetch/reset on PythonAnywhere via send_input
+        run: |
+          # Hämta CONSOLE_ID direkt från API igen (kompakt och robust):
+          CONSOLE_ID=$(curl -sS -X GET \
+            -H "Authorization: Token ${PA_API_TOKEN}" \
+            "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/consoles/" \
+            | python - <<'PY'
+import sys, json
+data=json.load(sys.stdin)
+# Ta senaste konsolen av typen 'bash'
+bash = [c for c in data if c.get("executable")=="bash"]
+print(bash[-1]["id"] if bash else "")
+PY
+          )
+          if [ -z "$CONSOLE_ID" ]; then
+            echo "No bash console found"; exit 1
+          fi
+
+          send() {
+            local line="$1"
+            curl -sS -X POST \
+              -H "Authorization: Token ${PA_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"input\":\"${line}\\n\"}" \
+              "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/consoles/${CONSOLE_ID}/send_input/" > /dev/null
+          }
+
+          # 1) Gå till repo-katalogen
+          send "cd /home/${PA_USERNAME}/${PA_REPO_DIR}"
+
+          # 2) Synka kod med Git
+          send "git fetch origin ${PA_BRANCH}"
+          send "git checkout ${PA_BRANCH}"
+          send "git reset --hard origin/${PA_BRANCH}"
+
+          # 3) (Valfritt) beroenden — anpassa vid virtualenv
+          # send "source /home/${PA_USERNAME}/venv/bin/activate && pip install -r requirements.txt"
+          # eller, utan venv:
+          # send "pip3 install --user -r requirements.txt || true"
+
+          # 4) Avsluta konsolen (frivilligt)
+          send "exit"
+
+      - name: Reload PythonAnywhere webapp (API)
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Token ${PA_API_TOKEN}" \
+            "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_DOMAIN}/reload/" \
+            -o /dev/stdout
