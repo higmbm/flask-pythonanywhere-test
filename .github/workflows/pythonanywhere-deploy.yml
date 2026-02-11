@@ -37,13 +37,13 @@ jobs:
 
           # Extrahera id i ett robust pythonblock (korrekt YAML tack vare run: | )
           CONSOLE_ID="$(python - <<'PY'
-import sys, json
-data = json.loads(sys.stdin.read())
-cid = data.get("id")
-if not cid:
-    raise SystemExit("No console id in response")
-print(cid)
-PY
+  import sys, json
+  data = json.loads(sys.stdin.read())
+  cid = data.get("id")
+  if not cid:
+      raise SystemExit("No console id in response")
+  print(cid)
+  PY
           <<< "${RESP}")"
 
           echo "CONSOLE_ID=${CONSOLE_ID}" >> "$GITHUB_ENV"
