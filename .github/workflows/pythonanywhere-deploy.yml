@@ -1,0 +1,82 @@
+name: Auto-deploy to PythonAnywhere (git pull + reload)
+
+on:
+  push:
+    branches: [ "main" ]   # du använder main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      PA_HOST: ${{ secrets.PA_HOST }}                # www.pythonanywhere.com eller eu.pythonanywhere.com
+      PA_USERNAME: ${{ secrets.PA_USERNAME }}        # magnushj
+      PA_DOMAIN: ${{ secrets.PA_DOMAIN }}            # magnushj.pythonanywhere.com
+      PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+      PA_REPO_DIR: ${{ secrets.PA_REPO_DIR }}        # flask-pythonanywhere-test
+      PA_BRANCH: ${{ secrets.PA_BRANCH }}            # main
+
+    steps:
+      - name: Checkout (valfritt)
+        uses: actions/checkout@v4
+
+      # 1) Skapa en bash-konsol på PythonAnywhere
+      - name: Create Bash console via API
+        id: create_console
+        run: |
+          set -euo pipefail
+
+          # Skapa konsol
+          RESP="$(curl -sS -X POST \
+            -H "Authorization: Token ${PA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"executable":"bash"}' \
+            "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/consoles/")"
+
+          echo "API response: ${RESP}"
+
+          CONSOLE_ID="$(echo "${RESP}" | jq -r '.id // empty')"
+          if [ -z "$CONSOLE_ID" ]; then
+            echo "::error::No console id in response"
+            exit 1
+          fi
+          echo "CONSOLE_ID=${CONSOLE_ID}" >> "$GITHUB_ENV"
+
+      # 2) Kör git-kommando inne i konsolen via send_input (JSON + newline)
+      - name: Git fetch/reset inside PA console
+        run: |
+          set -euo pipefail
+
+          send() {
+            local line="$1"
+            curl -sS -X POST \
+              -H "Authorization: Token ${PA_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"input\":\"${line}\\n\"}" \
+              "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/consoles/${CONSOLE_ID}/send_input/" > /dev/null
+          }
+
+          # 1) in i repo-katalogen
+          send "cd /home/${PA_USERNAME}/${PA_REPO_DIR}"
+
+          # 2) synka kod
+          send "git fetch origin ${PA_BRANCH}"
+          send "git checkout ${PA_BRANCH}"
+          send "git reset --hard origin/${PA_BRANCH}"
+
+          # 3) (valfritt) installera beroenden
+          # send "source /home/${PA_USERNAME}/venv/bin/activate && pip install -r requirements.txt"
+          # eller, utan venv:
+          # send "pip3 install --user -r requirements.txt || true"
+
+          # 4) stäng konsolen (frivilligt)
+          send "exit"
+
+      # 3) Reload av webappen via officiella API:et
+      - name: Reload PythonAnywhere webapp
+        run: |
+          set -euo pipefail
+          curl -sS -X POST \
+            -H "Authorization: Token ${PA_API_TOKEN}" \
+            "https://${PA_HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_DOMAIN}/reload/" \
+            -o /dev/stdout
