@@ -1,6 +1,7 @@
-from flask import Flask
+from flask import Flask, session, request
+
 app = Flask(__name__)
-app.secret_key = "Silmantra!"
+app.secret_key = "Silmantra!"   # krävs för sessioner
 
 @app.route("/")
 def index():
@@ -9,6 +10,5 @@ def index():
     session["count"] = count
     return f"Du har laddat sidan {count} gånger i denna session."
 
-# OBS: kör INTE app.run() på PythonAnywhere
 if __name__ == "__main__":
     app.run(debug=True)
