@@ -8,7 +8,7 @@ def index():
     count = session.get("count", 0)
     count += 1
     session["count"] = count
-    return f"TEST: Du har laddat sidan {count} gånger i denna session."
+    return f"Du har laddat sidan {count} gånger i denna session."
 
 if __name__ == "__main__":
     app.run(debug=True)
