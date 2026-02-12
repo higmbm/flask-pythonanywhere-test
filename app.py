@@ -1,7 +1,9 @@
+import sys, os
+
 from flask import Flask, render_template, request, session, redirect, url_for
 
 app = Flask(__name__)
-app.secret_key = "Silmantra?Tarnok!"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-change-me")
 
 @app.route("/", methods=["GET", "POST"])
 def index():
