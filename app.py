@@ -1,36 +1,19 @@
-from flask import Flask, render_template, request
-import pandas as pd
+from flask import Flask, render_template, request, session, redirect, url_for
 
 app = Flask(__name__)
-
+app.secret_key = "Silmantra?Tarnok!"
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    table_html = None
-
     if request.method == "POST":
-        if "excelfile" not in request.files:
-            return render_template("index.html", table_html="<p>Ingen fil vald.</p>")
+        project_name = (request.form.get("project_name") or "").strip()
+        if project_name:
+            session["project_name"] = project_name
+            return redirect(url_for("index"))
+        else:
+            return render_template("index.html", error="Project name must be non-empty.", project_name=None)
 
-        f = request.files["excelfile"]
-        if f.filename == "":
-            return render_template("index.html", table_html="<p>Filnamnet är tomt.</p>")
-
-        try:
-            # Läs Excel. dtype=object gör att vi inte oavsiktligt tvingar blandade kolumner till float.
-            df = pd.read_excel(f, engine="openpyxl", dtype=object)
-
-            # Ersätt NaN/None med tom sträng i hela DF:
-            df = df.where(df.notna(), "")
-
-            # Rendera till HTML och säkerställ att eventuell kvarvarande NaN visas som tomt
-            table_html = df.to_html(classes="table table-striped",
-                                    index=False,
-                                    na_rep="")  # extra säkerhetslina
-        except Exception as e:
-            table_html = f"<p>Kunde inte läsa filen: {e}</p>"
-
-    return render_template("index.html", table_html=table_html)
+    return render_template("index.html", project_name=session.get("project_name"))
 
 if __name__ == "__main__":
     app.run(debug=True)
