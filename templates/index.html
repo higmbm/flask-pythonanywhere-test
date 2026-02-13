@@ -1,30 +1,44 @@
 <!doctype html>
-<html lang="sv">
-  <head>
-    <meta charset="utf-8">
-    <title>Project</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:700px;margin:2rem auto;padding:0 1rem}
-      h1{margin-top:0}
-      input,button{font-size:1rem;margin-top:.5rem}
-      label{font-weight:600}
-      button{margin-left:.5rem}
-      .error{color:#b00020}
-    </style>
-  </head>
-  <body>
-    {% if project_name %}
-      <h1>Project name: {{ project_name }}</h1>
-    {% else %}
-      {% if error %}
-        <p class="error">{{ error }}</p>
-      {% endif %}
-      <form method="post" action="/">
-        <label for="project_name">Project name</label><br>
-        <input type="text" id="project_name" name="project_name" required>
-        <button type="submit">Create project</button>
-      </form>
-    {% endif %}
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Project</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    .error { color: #b00020; margin-top: .5rem; }
+    .row { margin-bottom: 1rem; }
+    form { display: inline-block; margin-right: .75rem; }
+    input[type="text"] { padding: .4rem .6rem; font-size: 1rem; }
+    button { padding: .45rem .8rem; font-size: 1rem; cursor: pointer; }
+    .muted { color: #555; }
+  </style>
+</head>
+<body>
+
+  {% if project_name %}
+    <p class="row">
+      <strong>Current project:</strong>
+      <span class="muted">{{ project_name }}</span>
+    </p>
+  {% endif %}
+
+  <form action="{{ url_for('index_post') }}" method="post">
+    <label for="project_name">Project name:</label>
+    <input id="project_name" name="project_name" type="text" placeholder="Enter project name">
+    <button type="submit">Save</button>
+  </form>
+
+  {% if project_name %}
+    <!-- Delete-knappen visas bara om ett projekt finns -->
+    <form action="{{ url_for('delete_project') }}" method="post" onsubmit="return confirm('Delete current project?');">
+      <button type="submit">Delete project</button>
+    </form>
+  {% endif %}
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+</body>
 </html>
