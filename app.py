@@ -1,7 +1,9 @@
+import os, sys
+
 from flask import Flask, render_template, request, session, redirect, url_for
 
 app = Flask(__name__)
-app.secret_key = "change-me"  # se till att ha en riktig hemlighet i prod
+app.secret_key = os.getenv("SECRET_KEY")
 
 @app.get("/")
 def index_get():
