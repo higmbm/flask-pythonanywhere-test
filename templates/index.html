@@ -1,89 +1,85 @@
 <!doctype html>
-<html lang="en">
+<html lang="sv">
 <head>
-    <meta charset="utf-8">
-    <title>Project</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: system-ui, sans-serif; margin: 2rem; }
-        .error { color: #b00020; margin-top: .5rem; }
-        .row { margin-bottom: 1rem; }
-        form { display: inline-block; margin-right: .75rem; }
-        input[type="text"] { padding: .4rem .6rem; font-size: 1rem; }
-        button { padding: .45rem .8rem; font-size: 1rem; cursor: pointer; }
-        .muted { color: #555; }
-    </style>
+  <meta charset="utf-8">
+  <title>Project</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    .error { color: #b00020; margin-top: .5rem; }
+    .row { margin-bottom: 1rem; }
+    form { display: inline-block; margin-right: .75rem; }
+    input[type="text"] { padding: .4rem .6rem; font-size: 1rem; }
+    button { padding: .45rem .8rem; font-size: 1rem; cursor: pointer; }
+    .muted { color: #555; }
+  </style>
 </head>
 <body>
-
-    {% if project_name %}
+  {% if project_name %}
     <p class="row">
-        <strong>Current project:</strong>
-        <span class="muted">{{ project_name }}</span>
+      <strong>Aktuellt projekt:</strong>
+      <span class="muted">{{ project_name }}</span>
     </p>
-    {% endif %}
+  {% endif %}
 
-    <!-- Formulär utan action; hanteras 100% av JavaScript -->
-    <form id="projectForm">
-        <label for="project_name">Project name:</label>
-        <input id="project_name" name="project_name" type="text" placeholder="Enter project name">
-        <button type="submit">Save</button>
-    </form>
+  <!-- Ett och samma formulär som byter metod (POST/PUT) i JS beroende på state -->
+  <form id="projectForm">
+    <label for="project_name">Projektnamn:</label>
+    <input id="project_name" name="project_name" type="text" placeholder="Ange projektnamn"
+           value="{{ project_name or '' }}">
+    <button type="submit">
+      {% if project_name %}Byt namn (PUT){% else %}Skapa (POST){% endif %}
+    </button>
+  </form>
 
-    {% if project_name %}
+  {% if project_name %}
+    <!-- Delete visas bara om ett projekt finns -->
     <form id="deleteForm">
-        <button type="submit" onclick="return confirm('Delete current project?');">Delete project</button>
+      <button type="submit" onclick="return confirm('Radera aktuellt projekt?');">Radera projekt (DELETE)</button>
     </form>
-    {% endif %}
+  {% endif %}
 
-    {% if error %}
+  {% if error %}
     <div class="error">{{ error }}</div>
-    {% endif %}
+  {% endif %}
 
-    <script>
-        // --- Spara projekt (PUT /api/project) ---
-        document.getElementById("projectForm").addEventListener("submit", async function (e) {
-            e.preventDefault();
+  <script>
+    // Sätt vilket anrop som ska göras: POST om inget projekt, PUT om projekt finns.
+    const hasProject = {{ 'true' if project_name else 'false' }};
 
-            const name = document.getElementById("project_name").value.trim();
-            if (!name) {
-                alert("Project name must be non-empty.");
-                return;
-            }
+    document.getElementById("projectForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("project_name").value.trim();
+      if (!name) { alert("Project name must be non-empty."); return; }
 
-            const response = await fetch("/api/project", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ project_name: name })
-            });
+      const method = hasProject ? "PUT" : "POST";
+      const res = await fetch("/api/project", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_name: name })
+      });
 
-            if (response.ok) {
-                location.reload();
-            } else {
-                const data = await response.json();
-                alert(data.error || "Error saving project.");
-            }
-        });
+      if (res.ok) {
+        location.reload();
+      } else {
+        let msg = `${res.status} ${res.statusText}`;
+        try { const j = await res.json(); msg = j.error || msg; } catch {}
+        alert(msg);
+      }
+    });
 
-        // --- Ta bort projekt (DELETE /api/project) ---
-        const deleteForm = document.getElementById("deleteForm");
-        if (deleteForm) {
-            deleteForm.addEventListener("submit", async function (e) {
-                e.preventDefault();
-
-                const response = await fetch("/api/project", {
-                    method: "DELETE"
-                });
-
-                // Status 204 = No Content
-                if (response.status === 204) {
-                    location.reload();
-                } else {
-                    alert("Error deleting project.");
-                }
-            });
+    const deleteForm = document.getElementById("deleteForm");
+    if (deleteForm) {
+      deleteForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const res = await fetch("/api/project", { method: "DELETE" });
+        if (res.status === 204) {
+          location.reload();
+        } else {
+          alert("Fel vid borttagning.");
         }
-    </script>
-
+      });
+    }
+  </script>
 </body>
 </html>

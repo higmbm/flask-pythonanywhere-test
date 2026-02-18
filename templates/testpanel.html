@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Eudoxa – Testpanel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --gap: 14px; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; }
+    h1 { margin-bottom: 4px; }
+    .subtitle { color: #555; margin: 0 0 20px 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap: var(--gap); }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
+    .card h2 { margin-top: 0; font-size: 1.1rem; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    label { min-width: 120px; }
+    input[type="text"], textarea, select {
+      padding: 8px; border: 1px solid #ccc; border-radius: 6px; flex: 1;
+    }
+    textarea { min-height: 70px; }
+    button {
+      padding: 8px 12px; border: 1px solid #999; background: #f6f6f6;
+      border-radius: 6px; cursor: pointer;
+    }
+    button.primary { background: #0b5cff; border-color: #0b5cff; color: white; }
+    button.danger { background: #b00020; border-color: #b00020; color: white; }
+    .log { white-space: pre-wrap; background: #0b1020; color: #e7f0ff; padding: 10px; border-radius: 8px; min-height: 120px; }
+    .hint { color: #666; font-size: .9rem; }
+    .kv { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  </style>
+</head>
+
+<body>
+  <h1>Eudoxa – Testpanel</h1>
+  <p class="subtitle">Testa REST‑endpoints i webbläsaren. Allt lagras i Flask‑sessionen.</p>
+
+  <div class="grid">
+
+    <!-- Projekt -->
+    <section class="card">
+      <h2>Projekt</h2>
+      <div class="row">
+        <label>Projektnamn</label>
+        <input id="projectName" type="text" placeholder="t.ex. Testprojekt">
+      </div>
+      <div class="row">
+        <button class="primary" id="btnCreateProject">Skapa (POST)</button>
+        <button id="btnRenameProject">Byt namn (PUT)</button>
+      </div>
+      <div class="row">
+        <button id="btnGetProject">Hämta (GET)</button>
+        <button class="danger" id="btnDeleteProject">Radera (DELETE)</button>
+      </div>
+      <p class="hint">
+        POST skapar nytt projekt om inget finns (409 om redan finns).
+        PUT byter namn på befintligt projekt (404 om inget projekt).
+      </p>
+    </section>
+
+    <!-- Aspekter -->
+    <section class="card">
+      <h2>Aspekter</h2>
+      <div class="row">
+        <label>Namn</label>
+        <input id="aspectName" type="text" placeholder="t.ex. Ekonomi">
+      </div>
+      <div class="row">
+        <label>Typ</label>
+        <select id="aspectType">
+          <option value="str">str</option>
+          <option value="int">int</option>
+          <option value="float">float</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Beskrivning</label>
+        <input id="aspectDesc" type="text">
+      </div>
+      <button class="primary" id="btnAddAspect">Lägg till aspekt (POST)</button>
+    </section>
+
+    <!-- Nivåer -->
+    <section class="card">
+      <h2>Nivåer</h2>
+      <div class="row">
+        <label>Aspekt</label>
+        <input id="levelAspectName" type="text" placeholder="t.ex. Ekonomi">
+      </div>
+      <div class="row">
+        <label>Nivå</label>
+        <input id="levelValue" type="text" placeholder="t.ex. Hög">
+      </div>
+      <div class="row">
+        <label>Beskrivning</label>
+        <input id="levelDesc" type="text">
+      </div>
+      <button class="primary" id="btnAddLevel">Lägg till nivå (POST)</button>
+    </section>
+
+    <!-- Konsekvenser -->
+    <section class="card">
+      <h2>Konsekvenser</h2>
+      <div class="row">
+        <label>Kortnamn</label>
+        <input id="consShort" type="text" placeholder="t.ex. C1">
+      </div>
+      <div>
+        <label>Levels (JSON dictionary)</label>
+        <textarea id="consLevels" placeholder='{"Ekonomi":"Hög"}'></textarea>
+      </div>
+      <button class="primary" id="btnAddConsequence">Lägg till konsekvens (POST)</button>
+      <p class="hint">Format: {"Aspekt":"Nivå", ...}</p>
+    </section>
+
+    <!-- Logg -->
+    <section class="card">
+      <h2>Logg</h2>
+      <button id="btnClearLog">Rensa logg</button>
+      <div id="log" class="log"></div>
+    </section>
+
+  </div>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const log = (...args) => {
+      logEl.textContent += args.join(" ") + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    async function api(url, method="GET", body=null) {
+      const options = { method, headers: {} };
+      if (body) {
+        options.headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, options);
+      let json = null; try { json = await res.json(); } catch {}
+      log(method, url, res.status, JSON.stringify(json, null, 2));
+      return { res, json };
+    }
+
+    // Projekt
+    document.getElementById("btnCreateProject").onclick = async () => {
+      const name = document.getElementById("projectName").value.trim();
+      if (!name) { log("❌ Ange projektnamn."); return; }
+      await api("/api/project", "POST", { project_name: name });
+    };
+
+    document.getElementById("btnRenameProject").onclick = async () => {
+      const name = document.getElementById("projectName").value.trim();
+      if (!name) { log("❌ Ange nytt projektnamn."); return; }
+      await api("/api/project", "PUT", { project_name: name });
+    };
+
+    document.getElementById("btnGetProject").onclick = async () => {
+      await api("/api/project");
+    };
+
+    document.getElementById("btnDeleteProject").onclick = async () => {
+      await api("/api/project", "DELETE");
+    };
+
+    // Aspekt
+    document.getElementById("btnAddAspect").onclick = async () => {
+      const name = document.getElementById("aspectName").value.trim();
+      const data_type = document.getElementById("aspectType").value;
+      const description = document.getElementById("aspectDesc").value.trim() || null;
+      if (!name) { log("❌ Ange aspektnamn."); return; }
+
+      await api("/api/aspects", "POST", { name, data_type, description });
+      await api("/api/project"); // visa uppdaterat state
+    };
+
+    // Nivå
+    document.getElementById("btnAddLevel").onclick = async () => {
+      const aspect = document.getElementById("levelAspectName").value.trim();
+      const level = document.getElementById("levelValue").value.trim();
+      const description = document.getElementById("levelDesc").value.trim() || null;
+      if (!aspect || !level) { log("❌ Ange aspekt och nivå."); return; }
+
+      await api(`/api/aspects/${encodeURIComponent(aspect)}/levels`, "POST", { level, description });
+      await api("/api/project");
+    };
+
+    // Konsekvens
+    document.getElementById("btnAddConsequence").onclick = async () => {
+      const short_name = document.getElementById("consShort").value.trim();
+      if (!short_name) { log("❌ Ange kortnamn."); return; }
+      let levels = {};
+      try { levels = JSON.parse(document.getElementById("consLevels").value.trim()); }
+      catch { log("❌ Ogiltig JSON i konsekvensnivåer."); return; }
+
+      await api("/api/consequences", "POST", { short_name, aspect_levels: levels });
+      await api("/api/project");
+    };
+
+    // Rensa logg
+    document.getElementById("btnClearLog").onclick = () => { logEl.textContent = ""; };
+  </script>
+</body>
+</html>
