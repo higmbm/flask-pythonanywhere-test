@@ -1,0 +1,15 @@
+.text-muted, .muted, .subtitle, .hint { color: #555; }
+
+body { font-family: system-ui, -apple-system, sans-serif; }
+
+button {
+  border: 1px solid #999;
+  border-radius: 6px;
+  background: #f6f6f6;
+  cursor: pointer;
+}
+
+input[type="text"], textarea, select {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}

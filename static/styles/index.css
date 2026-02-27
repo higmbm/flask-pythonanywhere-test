@@ -1,0 +1,27 @@
+.error {
+  color: #b00020;
+  margin-top: .5rem;
+}
+
+.row {
+  margin-bottom: 1rem;
+}
+
+body {
+  margin: 2rem;
+}
+
+button {
+  padding: .45rem .8rem;
+  font-size: 1rem;
+}
+
+form {
+  display: inline-block;
+  margin-right: .75rem;
+}
+
+input[type="text"] {
+  padding: .4rem .6rem;
+  font-size: 1rem;
+}

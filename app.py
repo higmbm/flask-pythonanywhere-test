@@ -137,10 +137,37 @@ def add_level(aspect_name):
     save_manager(mgr)
     return {"message": "Level added"}, 201
 
-
 # -----------------------------------------------------------
 #  REST: CONSEQUENCES
 # -----------------------------------------------------------
+@app.get("/api/consequences")
+def get_consequences():
+    aspects = manager.aspects               # lista med Aspect-objekt
+    consequences = manager.consequences     # lista med Consequence-objekt
+
+    # Kolumnrubriker
+    headers = ["Konsekvens"] + [
+        f"{aspect.name} ({aspect.type})"
+        for aspect in aspects
+    ]
+
+    rows = []
+    for cons in consequences:
+        # Starta varje rad med konsekvensens kortnamn (anpassa om du har short_name)
+        row = [getattr(cons, "short_name", None)]
+
+        # Lägg till nivån för varje aspekt
+        for aspect in aspects:
+            level = cons.aspect_levels.get(aspect.name, None)
+            row.append(level)
+
+        rows.append(row)
+
+    return {
+        "headers": headers,
+        "rows": rows
+    }
+    
 @app.post("/api/consequences")
 def add_consequence():
     mgr = load_manager_or_400()

@@ -4,15 +4,8 @@
   <meta charset="utf-8">
   <title>Project</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; }
-    .error { color: #b00020; margin-top: .5rem; }
-    .row { margin-bottom: 1rem; }
-    form { display: inline-block; margin-right: .75rem; }
-    input[type="text"] { padding: .4rem .6rem; font-size: 1rem; }
-    button { padding: .45rem .8rem; font-size: 1rem; cursor: pointer; }
-    .muted { color: #555; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
 </head>
 <body>
   {% if project_name %}

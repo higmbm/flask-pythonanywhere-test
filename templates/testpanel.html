@@ -4,30 +4,8 @@
   <meta charset="utf-8">
   <title>Eudoxa – Testpanel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    :root { --gap: 14px; }
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; }
-    h1 { margin-bottom: 4px; }
-    .subtitle { color: #555; margin: 0 0 20px 0; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap: var(--gap); }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
-    .card h2 { margin-top: 0; font-size: 1.1rem; }
-    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-    label { min-width: 120px; }
-    input[type="text"], textarea, select {
-      padding: 8px; border: 1px solid #ccc; border-radius: 6px; flex: 1;
-    }
-    textarea { min-height: 70px; }
-    button {
-      padding: 8px 12px; border: 1px solid #999; background: #f6f6f6;
-      border-radius: 6px; cursor: pointer;
-    }
-    button.primary { background: #0b5cff; border-color: #0b5cff; color: white; }
-    button.danger { background: #b00020; border-color: #b00020; color: white; }
-    .log { white-space: pre-wrap; background: #0b1020; color: #e7f0ff; padding: 10px; border-radius: 8px; min-height: 120px; }
-    .hint { color: #666; font-size: .9rem; }
-    .kv { font-family: ui-monospace, Menlo, Consolas, monospace; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/testpanel.css') }}">
 </head>
 
 <body>
