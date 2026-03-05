@@ -47,7 +47,7 @@
             <td>{{ row.name }}</td>
             <td>{{ row.dtype }}</td>
             <td>{{ row.description }}</td>
-            <td>{{ row.levels }}</td>
+            <td><a href="/aspects/{{ row.name }}/levels">Visa</a></td>
             <td style="text-align: right">{{ row.vdiffs }}</td>
         </tr>
         {% endfor %}

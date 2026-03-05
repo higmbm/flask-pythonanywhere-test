@@ -108,18 +108,17 @@ class Aspect:
             description=data.get("description")
         )
     
-        # Återskapa levels
-        for level, desc in data["levels"].items():
-            asp.levels[level] = desc
+        # Återskapa NIVÅER
+        asp.levels = dict(data.get("levels", {}))
     
-        # Återskapa vdiffs
+        # Återskapa VDIFFS (ersätt default-vdiff)
         asp.vdiffs = [
             VDiff(
                 aspect_name=data["name"],
                 from_level=vd["from_level"],
                 to_level=vd["to_level"]
             )
-            for vd in data["vdiffs"]
+            for vd in data.get("vdiffs", [])
         ]
     
         return asp
@@ -1101,37 +1100,81 @@ class EudoxaManager:
         return result
 
     def to_dict(self):
-        """Serialiserar hela EudoxaManager till en ren datastruktur."""
+        """Fullständig JSON-vänlig serialisering av hela EudoxaManager."""
+        # Serialisera vdiff_comparison_matrix med str-nycklar
+        vdcm_out = {}
+        for (a1, a2), relation_map in self.vdiff_comparison_matrix.items():
+            key = f"{a1}|||{a2}"   # unikt och entydigt
+            vdcm_out[key] = {}
+            for (d1, d2), rel in relation_map.items():
+                d1s = f"{d1[0]}::{d1[1]}"
+                d2s = f"{d2[0]}::{d2[1]}"
+                pair_key = f"{d1s}>>{d2s}"
+                vdcm_out[key][pair_key] = rel
+    
         return {
-            "aspects": {
+            "__schema__": 1,
+    
+            # Aspekter och konsekvenser (du hade redan denna del)
+            "aspects": { 
                 name: aspect.to_dict()
                 for name, aspect in self.aspects.items()
             },
+    
             "consequences": {
                 short: c.to_dict()
                 for short, c in self.consequences.items()
-            }
-            # Om du senare vill, kan vi lägga till:
-            # "vdiff_comparison_matrix": <serialiserad version>
+            },
+    
+            # Nytt: komplett konsekvensrymd
+            "consequence_space": [
+                c.to_dict() for c in self.consequence_space
+            ],
+    
+            # Nytt: komplett vdiff-matris
+            "vdiff_comparison_matrix": vdcm_out
         }
 
     @classmethod
     def from_dict(cls, data):
-        """
-        Återskapar en EudoxaManager från en serialiserad dict.
-        Förutsätter att data innehåller:
-          - "aspects": { name: <Aspect-dict> }
-          - "consequences": { short: <Consequence-dict> }
-        """
         mgr = cls()
     
-        # --- Återskapa aspekter ---
-        for name, a_data in data["aspects"].items():
-            asp = Aspect.from_dict(a_data)
-            mgr.aspects[name] = asp
+        # Rensa auto-genererade startvärden:
+        mgr.aspects = {}
+        mgr.consequences = {}
+        mgr.consequence_space = []
+        mgr.vdiff_comparison_matrix = {}
     
-        # --- Återskapa consequences ---
-        for short, c_data in data["consequences"].items():
-            mgr.consequences[short] = Consequence.from_dict(c_data)
+        # ---- Aspekter ----
+        for name, asp_data in data.get("aspects", {}).items():
+            mgr.aspects[name] = Aspect.from_dict(asp_data)
+    
+        # ---- Konsekvenser ----
+        for short, cons_data in data.get("consequences", {}).items():
+            mgr.consequences[short] = Consequence.from_dict(cons_data)
+    
+        # ---- consequence_space ----
+        cs_list = data.get("consequence_space", [])
+        for cdata in cs_list:
+            mgr.consequence_space.append(Consequence.from_dict(cdata))
+    
+        # ---- vdiff_comparison_matrix ----
+        vdcm_in = data.get("vdiff_comparison_matrix", {})
+        for key, relation_map in vdcm_in.items():
+            a1, a2 = key.split("|||")
+            mgr.vdiff_comparison_matrix[(a1, a2)] = {}
+    
+            for pair_key, rel in relation_map.items():
+                d1s, d2s = pair_key.split(">>")
+                f1, t1 = d1s.split("::")
+                f2, t2 = d2s.split("::")
+    
+                # None representeras som '' i dina VDiff
+                f1 = None if f1 == "" else f1
+                t1 = None if t1 == "" else t1
+                f2 = None if f2 == "" else f2
+                t2 = None if t2 == "" else t2
+    
+                mgr.vdiff_comparison_matrix[(a1, a2)][((f1, t1), (f2, t2))] = rel
     
         return mgr

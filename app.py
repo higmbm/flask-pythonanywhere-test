@@ -177,6 +177,51 @@ def list_aspects():
 # -----------------------------------------------------------
 #  REST: LEVELS
 # -----------------------------------------------------------
+@app.get("/aspects/<aspect_name>/levels")
+def levels_html(aspect_name):
+    mgr = load_manager_or_400()
+
+    # Hämta aspekt
+    aspect = mgr.aspects.get(aspect_name)
+    if not aspect:
+        abort(404, f"Aspekt '{aspect_name}' finns inte")
+
+    # Bygg tabellrader (anpassa efter hur ditt Level-objekt ser ut)
+    rows = []
+    for level_name, level_obj in aspect.levels.items():
+        rows.append({
+            "level": level_name,
+            "description": getattr(level_obj, "description", "")
+        })
+
+    return render_template(
+        "levels.html",
+        aspect_name=aspect_name,
+        rows=rows
+    )
+
+@app.get("/api/aspects/<aspect_name>/levels")
+def list_levels(aspect_name):
+    mgr = load_manager_or_400()
+
+    aspect = mgr.aspects.get(aspect_name)
+    if not aspect:
+        return {"error": f"Aspect '{aspect_name}' not found"}, 404
+
+    levels = aspect.levels or {}
+    
+    rows = []
+    for level_name, level_obj in levels.items():
+        rows.append([
+            level_name,
+            "" if level_obj.description is None else str(level_obj.description)
+        ])
+
+    return {
+        "headers": ["Nivå", "Beskrivning"],
+        "rows": rows
+    }, 200
+    
 @app.post("/api/aspects/<aspect_name>/levels")
 def add_level(aspect_name):
     mgr = load_manager_or_400()
