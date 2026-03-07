@@ -1,0 +1,6 @@
+/* levels.css */
+/* Endast små justeringar som inte passar i common.css */
+
+.data-table.narrow {
+    max-width: 600px;
+}

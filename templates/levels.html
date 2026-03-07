@@ -3,34 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <title>Nivåer för aspekt: {{ aspect_name }}</title>
-    <style>
-        table { border-collapse: collapse; width: 60%; }
-        th, td { border: 1px solid #444; padding: 6px; }
-        th { background: #eee; }
-    </style>
+
+    <!-- Gemensamma stilar -->
+    <link rel="stylesheet" href="/static/css/common.css">
+
+    <!-- Sidunika stilar (frivilligt) -->
+    <link rel="stylesheet" href="/static/css/levels.css">
 </head>
+
 <body>
+    <header class="page-header">
+        <h2>Nivåer för aspekt: {{ aspect_name }}</h2>
+    </header>
 
-<h2>Nivåer för aspekt: {{ aspect_name }}</h2>
+    <main class="container">
+        <table class="data-table narrow">
+            <thead>
+                <tr>
+                    <th>Nivå</th>
+                    <th>Beskrivning</th>
+                </tr>
+            </thead>
 
-<table>
-    <thead>
-        <tr>
-            <th>Nivå</th>
-            <th>Beskrivning</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in rows %}
-        <tr>
-            <td>{{ row.level }}</td>
-            <td>{{ row.description }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.level }}</td>
+                    <td>{{ row.description }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
-<p><a href="/aspects">Tillbaka till aspekter</a></p>
-
+        <p class="back-link">
+            <a href="/aspects">Tillbaka till aspekter</a>
+        </p>
+    </main>
 </body>
 </html>

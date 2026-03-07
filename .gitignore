@@ -1,3 +1,5 @@
 .project
 .pydevproject
 venv
+/.pytest_cache/
+/eudoxa.log

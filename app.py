@@ -103,9 +103,12 @@ def delete_project():
 @app.get("/aspects")
 def aspects_html():
     """Renderar en HTML-tabell med alla aspekter."""
-    mgr = load_manager_or_400()
-
-    aspects = mgr.aspects or {}
+    try:
+        mgr = load_manager_or_400()
+    except:
+        mgr = None
+    
+    aspects = mgr.aspects if mgr else {}
 
     # Bygg rader åt HTML-tabellen
     table_rows = []
@@ -150,24 +153,25 @@ def add_aspect():
 def list_aspects():
     """
     Returnerar en tabell över alla aspekter som JSON:
-    { "headers": [...], "rows": [[...], ...] }
+    { "headers": [...], "rows": [...] }
     Kolumner: Namn, Datatyp, Beskrivning, Nivåer, #Δ
     """
-    # 1) Läs manager från session (400 om inget projekt)
+
     mgr = load_manager_or_400()
 
-    # 2) Förbered kolumnrubriker
     headers = ["Namn", "Datatyp", "Beskrivning", "Nivåer", "#Δ"]
 
-    # 3) Iterera över alla aspekter i dict[str, Aspect]
     rows = []
     for name, aspect in (mgr.aspects or {}).items():
-        # Datatypnamn (hanterar både typer och ev. str)
+
+        # Datatyp: omvandla Python-typ till str
         dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
-        # Lista nivånamn (kommaseparerade)
-        level_names = ", ".join(str(lvl) for lvl in aspect.levels.keys())
-        # Antal VDiff (kan inkludera "naturliga nollor")
-        n_vdiffs = len(aspect.vdiffs) if getattr(aspect, "vdiffs", None) is not None else 0
+
+        # Lista nivånamn (din levels är dict[level_name -> description])
+        level_names = ", ".join(aspect.levels.keys())
+
+        # Antal värdedifferenser (du har alltid en lista: aspect.vdiffs)
+        n_vdiffs = len(aspect.vdiffs) if aspect.vdiffs else 0
 
         rows.append([
             name,
@@ -208,18 +212,18 @@ def levels_html(aspect_name):
 @app.get("/api/aspects/<aspect_name>/levels")
 def list_levels(aspect_name):
     mgr = load_manager_or_400()
-
     aspect = mgr.aspects.get(aspect_name)
+
     if not aspect:
         return {"error": f"Aspect '{aspect_name}' not found"}, 404
 
-    levels = aspect.levels or {}
-    
+    levels = aspect.levels or {}   # dict: level_name -> description (str/None)
+
     rows = []
-    for level_name, level_obj in levels.items():
+    for level_name, description in levels.items():
         rows.append([
             level_name,
-            "" if level_obj.description is None else str(level_obj.description)
+            "" if description is None else str(description)
         ])
 
     return {
