@@ -1,35 +1,36 @@
 <!doctype html>
-<html lang="sv">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Project</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
 </head>
 <body>
   {% if project_name %}
     <p class="row">
-      <strong>Aktuellt projekt:</strong>
+      <strong>Current project:</strong>
       <span class="muted">{{ project_name }}</span>
     </p>
   {% endif %}
 
-  <!-- Ett och samma formulär som byter metod (POST/PUT) i JS beroende på state -->
-  <form id="projectForm">
-    <label for="project_name">Projektnamn:</label>
-    <input id="project_name" name="project_name" type="text" placeholder="Ange projektnamn"
+  <!-- data-has-project is set server-side so the JS stays syntactically valid -->
+  <div id="appState" data-has-project="{{ 'true' if project_name else 'false' }}" hidden></div>
+
+  <div class="row">
+    <label for="project_name">Project name:</label>
+    <input id="project_name" type="text" placeholder="Enter project name"
            value="{{ project_name or '' }}">
-    <button type="submit">
-      {% if project_name %}Byt namn (PUT){% else %}Skapa (POST){% endif %}
+    <button id="btnSaveProject">
+      {% if project_name %}Rename (PUT){% else %}Create (POST){% endif %}
     </button>
-  </form>
+  </div>
 
   {% if project_name %}
-    <!-- Delete visas bara om ett projekt finns -->
-    <form id="deleteForm">
-      <button type="submit" onclick="return confirm('Radera aktuellt projekt?');">Radera projekt (DELETE)</button>
-    </form>
+    <div class="row">
+      <button id="btnDeleteProject">Delete project (DELETE)</button>
+    </div>
   {% endif %}
 
   {% if error %}
@@ -37,11 +38,10 @@
   {% endif %}
 
   <script>
-    // Sätt vilket anrop som ska göras: POST om inget projekt, PUT om projekt finns.
-    const hasProject = {{ 'true' if project_name else 'false' }};
+    // Determine which HTTP method to use: POST if no project exists, PUT if one does.
+    const hasProject = document.getElementById("appState").dataset.hasProject === "true";
 
-    document.getElementById("projectForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
+    document.getElementById("btnSaveProject").addEventListener("click", async () => {
       const name = document.getElementById("project_name").value.trim();
       if (!name) { alert("Project name must be non-empty."); return; }
 
@@ -61,15 +61,15 @@
       }
     });
 
-    const deleteForm = document.getElementById("deleteForm");
-    if (deleteForm) {
-      deleteForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    const btnDelete = document.getElementById("btnDeleteProject");
+    if (btnDelete) {
+      btnDelete.addEventListener("click", async () => {
+        if (!confirm("Delete the current project?")) return;
         const res = await fetch("/api/project", { method: "DELETE" });
         if (res.status === 204) {
           location.reload();
         } else {
-          alert("Fel vid borttagning.");
+          alert("Error deleting project.");
         }
       });
     }

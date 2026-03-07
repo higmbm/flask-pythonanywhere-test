@@ -8,15 +8,14 @@ app = Flask(__name__)
 # -----------------------------------------------------------
 #  SESSION / CONFIG
 # -----------------------------------------------------------
-# Viktigt: hemlighet för att kunna använda Flask-sessioner
 app.secret_key = os.getenv("SECRET_KEY") or "dev-secret-change-me"
 
 
 # -----------------------------------------------------------
-#  HJÄLPFUNKTIONER
+#  HELPERS
 # -----------------------------------------------------------
 def load_manager_or_400():
-    """Läs EudoxaManager från sessionen eller returnera 400."""
+    """Load EudoxaManager from the session, or return 400 if no active project."""
     serialized_mgr = session.get("manager")
     if not serialized_mgr:
         abort(400, description="No active project")
@@ -24,12 +23,12 @@ def load_manager_or_400():
 
 
 def save_manager(mgr: EudoxaManager):
-    """Spara manager i sessionen."""
+    """Save the manager to the session."""
     session["manager"] = mgr.to_dict()
 
 
 # -----------------------------------------------------------
-#  UI – valfritt (används om du vill köra index.html)
+#  UI
 # -----------------------------------------------------------
 @app.get("/")
 def index():
@@ -41,7 +40,7 @@ def index():
 
 @app.post("/api/project")
 def create_project():
-    """Skapa nytt projekt (endast om inget projekt redan finns)."""
+    """Create a new project (only if no project already exists)."""
     if "project_name" in session:
         return {"error": "A project already exists. Use PUT to rename."}, 409
 
@@ -60,7 +59,7 @@ def create_project():
 
 @app.put("/api/project")
 def rename_project():
-    """Byt namn på ett befintligt projekt."""
+    """Rename an existing project."""
     if "project_name" not in session:
         return {"error": "No active project. Use POST to create a project."}, 404
 
@@ -76,7 +75,7 @@ def rename_project():
 
 @app.get("/api/project")
 def get_project():
-    """Hämta projektets namn + serialiserad EudoxaManager."""
+    """Get the project name and serialized EudoxaManager."""
     name = session.get("project_name")
     serialized_mgr = session.get("manager")
 
@@ -91,7 +90,7 @@ def get_project():
 
 @app.delete("/api/project")
 def delete_project():
-    """Radera projekt + manager ur sessionen."""
+    """Delete the project and manager from the session."""
     session.pop("project_name", None)
     session.pop("manager", None)
     return "", 204
@@ -102,7 +101,7 @@ def delete_project():
 # -----------------------------------------------------------
 @app.get("/aspects")
 def aspects_html():
-    """Renderar en HTML-tabell med alla aspekter."""
+    """Render an HTML table of all aspects."""
     try:
         mgr = load_manager_or_400()
     except:
@@ -110,7 +109,7 @@ def aspects_html():
     
     aspects = mgr.aspects if mgr else {}
 
-    # Bygg rader åt HTML-tabellen
+    # Build rows for the HTML table
     table_rows = []
     for name, aspect in aspects.items():
         dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
@@ -152,25 +151,24 @@ def add_aspect():
 @app.get("/api/aspects")
 def list_aspects():
     """
-    Returnerar en tabell över alla aspekter som JSON:
+    Return a table of all aspects as JSON:
     { "headers": [...], "rows": [...] }
-    Kolumner: Namn, Datatyp, Beskrivning, Nivåer, #Δ
+    Columns: Name, Data type, Description, Levels, #Δ
     """
-
     mgr = load_manager_or_400()
 
-    headers = ["Namn", "Datatyp", "Beskrivning", "Nivåer", "#Δ"]
+    headers = ["Name", "Data type", "Description", "Levels", "#Δ"]
 
     rows = []
     for name, aspect in (mgr.aspects or {}).items():
 
-        # Datatyp: omvandla Python-typ till str
+        # Data type: convert Python type to str
         dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
 
-        # Lista nivånamn (din levels är dict[level_name -> description])
+        # List level names
         level_names = ", ".join(aspect.levels.keys())
 
-        # Antal värdedifferenser (du har alltid en lista: aspect.vdiffs)
+        # Number of value-differences
         n_vdiffs = len(aspect.vdiffs) if aspect.vdiffs else 0
 
         rows.append([
@@ -190,12 +188,10 @@ def list_aspects():
 def levels_html(aspect_name):
     mgr = load_manager_or_400()
 
-    # Hämta aspekt
     aspect = mgr.aspects.get(aspect_name)
     if not aspect:
-        abort(404, f"Aspekt '{aspect_name}' finns inte")
+        abort(404, f"Aspect '{aspect_name}' not found")
 
-    # Bygg tabellrader (anpassa efter hur ditt Level-objekt ser ut)
     rows = []
     for level_name, level_obj in aspect.levels.items():
         rows.append({
@@ -217,7 +213,7 @@ def list_levels(aspect_name):
     if not aspect:
         return {"error": f"Aspect '{aspect_name}' not found"}, 404
 
-    levels = aspect.levels or {}   # dict: level_name -> description (str/None)
+    levels = aspect.levels or {}
 
     rows = []
     for level_name, description in levels.items():
@@ -227,7 +223,7 @@ def list_levels(aspect_name):
         ])
 
     return {
-        "headers": ["Nivå", "Beskrivning"],
+        "headers": ["Level", "Description"],
         "rows": rows
     }, 200
     
@@ -252,30 +248,23 @@ def add_level(aspect_name):
 # -----------------------------------------------------------
 @app.get("/api/consequences")
 def get_consequences():
-    # 1) Läs manager från session (400 om inget projekt)
     mgr = load_manager_or_400()
 
-    # 2) Hämta aspekter och konsekvenser
     aspects = getattr(mgr, "aspects", []) or []
     consequences = getattr(mgr, "consequences", []) or []
 
-    # 3) Kolumnrubriker: "Konsekvens" + en kolumn per aspekt
-    #    OBS: Byt aspect.type -> aspect.data_type om din Aspect-klass använder det namnet
     def dtype(a):
         return getattr(a, "type", None) or getattr(a, "data_type", "")
 
-    headers = ["Konsekvens"] + [f"{a.name} ({dtype(a)})" for a in aspects]
+    headers = ["Consequence"] + [f"{a.name} ({dtype(a)})" for a in aspects]
 
-    # 4) Rader: short_name + nivå per aspekt
     rows = []
     for cons in consequences:
         short = getattr(cons, "short_name", "") or getattr(cons, "short", "") or ""
-        # cons.aspect_levels antas vara en dict: { aspect_name: level }
         aspect_levels = getattr(cons, "aspect_levels", {}) or {}
         row = [short]
         for a in aspects:
             level = aspect_levels.get(a.name, "")
-            # säkerställ sträng (om nivåer kan vara andra typer)
             row.append("" if level is None else str(level))
         rows.append(row)
 
@@ -299,7 +288,7 @@ def add_consequence():
 
 
 # -----------------------------------------------------------
-#  TESTPANEL
+#  TEST PANEL
 # -----------------------------------------------------------
 @app.get("/testpanel")
 def testpanel():
@@ -307,7 +296,7 @@ def testpanel():
 
 
 # -----------------------------------------------------------
-#  STARTA SERVERN
+#  START SERVER
 # -----------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
