@@ -2,4 +2,5 @@
 .pydevproject
 venv
 /.pytest_cache/
+__pycache__
 /eudoxa.log
