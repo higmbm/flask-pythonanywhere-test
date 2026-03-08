@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Consequences</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/consequences.css') }}">
+</head>
+<body>
+
+  <h1>Consequences</h1>
+
+  <p class="back-link"><a href="/testpanel">&larr; Back to test panel</a></p>
+
+  <table class="data-table consequences-table">
+    <thead>
+      <tr>
+        <th>Short name</th>
+        {% for header in headers %}
+        <th>{{ header }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.short_name }}</td>
+        {% for level in row.levels %}
+        <td>{{ level }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+</body>
+</html>

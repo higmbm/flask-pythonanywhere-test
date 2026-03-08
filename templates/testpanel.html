@@ -93,6 +93,7 @@
         <textarea id="consLevels" placeholder='{"Economy":"High"}'></textarea>
       </div>
       <button class="primary" id="btnAddConsequence">Add consequence (POST)</button>
+      <button id="btnListConsequences">List consequences (GET)</button>
       <p class="hint">Format: {"Aspect":"Level", ...}</p>
     </section>
 
@@ -225,6 +226,11 @@
 
       await api("/api/consequences", "POST", { short_name, aspect_levels: levels });
       await api("/api/project");
+    };
+
+    // Consequences
+    document.getElementById("btnListConsequences").onclick = () => {
+      window.location.href = "/consequences";
     };
 
     // Clear log

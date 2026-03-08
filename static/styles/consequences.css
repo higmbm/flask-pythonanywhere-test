@@ -1,0 +1,10 @@
+/* ============================================================
+   consequences.css  —  Page-specific styles for consequences.html
+   ============================================================ */
+
+/* First column (short name) slightly narrower than aspect columns */
+.consequences-table td:first-child,
+.consequences-table th:first-child {
+  font-weight: bold;
+  white-space: nowrap;
+}

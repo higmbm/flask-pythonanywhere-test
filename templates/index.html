@@ -8,29 +8,34 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
 </head>
 <body>
-  {% if project_name %}
-    <p class="row">
-      <strong>Current project:</strong>
-      <span class="muted">{{ project_name }}</span>
-    </p>
-  {% endif %}
 
-  <!-- data-has-project is set server-side so the JS stays syntactically valid -->
+  <!-- Server-side state passed to JS via data attribute -->
   <div id="appState" data-has-project="{{ 'true' if project_name else 'false' }}" hidden></div>
 
-  <div class="row">
-    <label for="project_name">Project name:</label>
-    <input id="project_name" type="text" placeholder="Enter project name"
-           value="{{ project_name or '' }}">
-    <button id="btnSaveProject">
-      {% if project_name %}Rename (PUT){% else %}Create (POST){% endif %}
-    </button>
-  </div>
-
   {% if project_name %}
-    <div class="row">
-      <button id="btnDeleteProject">Delete project (DELETE)</button>
+    <!-- Project exists: show name and Manage button -->
+    <p>
+      <strong>Current project:</strong>
+      <span class="muted">{{ project_name }}</span>
+      <button id="btnManage">Manage project</button>
+    </p>
+
+    <!-- Management panel (hidden until Manage is clicked) -->
+    <div id="managePanel" class="action-panel" hidden>
+      <label for="project_name">New name:</label>
+      <input id="project_name" type="text" value="{{ project_name }}">
+      <button id="btnRename">Rename (PUT)</button>
+      <button id="btnDelete" class="danger">Delete (DELETE)</button>
     </div>
+
+  {% else %}
+    <!-- No project: show create form immediately -->
+    <div class="action-panel">
+      <label for="project_name">Project name:</label>
+      <input id="project_name" type="text" placeholder="Enter project name">
+      <button id="btnCreate">Create (POST)</button>
+    </div>
+
   {% endif %}
 
   {% if error %}
@@ -38,38 +43,73 @@
   {% endif %}
 
   <script>
-    // Determine which HTTP method to use: POST if no project exists, PUT if one does.
     const hasProject = document.getElementById("appState").dataset.hasProject === "true";
 
-    document.getElementById("btnSaveProject").addEventListener("click", async () => {
-      const name = document.getElementById("project_name").value.trim();
-      if (!name) { alert("Project name must be non-empty."); return; }
+    // ---- Toggle manage panel ----
+    const btnManage   = document.getElementById("btnManage");
+    const managePanel = document.getElementById("managePanel");
 
-      const method = hasProject ? "PUT" : "POST";
-      const res = await fetch("/api/project", {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_name: name })
+    if (btnManage) {
+      btnManage.addEventListener("click", () => {
+        managePanel.hidden = !managePanel.hidden;
       });
+    }
 
-      if (res.ok) {
-        location.reload();
-      } else {
-        let msg = `${res.status} ${res.statusText}`;
-        try { const j = await res.json(); msg = j.error || msg; } catch {}
-        alert(msg);
-      }
-    });
+    // ---- Rename ----
+    const btnRename = document.getElementById("btnRename");
+    if (btnRename) {
+      btnRename.addEventListener("click", async () => {
+        const name = document.getElementById("project_name").value.trim();
+        if (!name) { alert("Project name must be non-empty."); return; }
 
-    const btnDelete = document.getElementById("btnDeleteProject");
+        const res = await fetch("/api/project", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_name: name })
+        });
+
+        if (res.ok) {
+          location.reload();
+        } else {
+          let msg = `${res.status} ${res.statusText}`;
+          try { const j = await res.json(); msg = j.error || msg; } catch {}
+          alert(msg);
+        }
+      });
+    }
+
+    // ---- Delete ----
+    const btnDelete = document.getElementById("btnDelete");
     if (btnDelete) {
       btnDelete.addEventListener("click", async () => {
-        if (!confirm("Delete the current project?")) return;
         const res = await fetch("/api/project", { method: "DELETE" });
         if (res.status === 204) {
           location.reload();
         } else {
           alert("Error deleting project.");
+        }
+      });
+    }
+
+    // ---- Create ----
+    const btnCreate = document.getElementById("btnCreate");
+    if (btnCreate) {
+      btnCreate.addEventListener("click", async () => {
+        const name = document.getElementById("project_name").value.trim();
+        if (!name) { alert("Project name must be non-empty."); return; }
+
+        const res = await fetch("/api/project", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_name: name })
+        });
+
+        if (res.ok) {
+          location.reload();
+        } else {
+          let msg = `${res.status} ${res.statusText}`;
+          try { const j = await res.json(); msg = j.error || msg; } catch {}
+          alert(msg);
         }
       });
     }

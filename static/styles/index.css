@@ -1,13 +1,25 @@
 /* ============================================================
-   index.css  –  Page-specific styles for index.html
+   index.css  —  Page-specific styles for index.html
    ============================================================ */
 
-/* Stack form and delete button vertically with spacing */
-form {
-  display: inline-block;
-  margin-right: 0.75rem;
+.action-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
-.row {
-  margin-bottom: 1rem;
+/* Ensure hidden attribute always wins over display:flex */
+[hidden] {
+  display: none !important;
+}
+
+button.danger {
+  background: #b00020;
+  border-color: #b00020;
+  color: white;
+}
+
+button.danger:hover {
+  background: #8c0019;
 }

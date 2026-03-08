@@ -246,6 +246,35 @@ def add_level(aspect_name):
 # -----------------------------------------------------------
 #  REST: CONSEQUENCES
 # -----------------------------------------------------------
+@app.get("/consequences")
+def consequences_html():
+    """Render an HTML table of all consequences."""
+    try:
+        mgr = load_manager_or_400()
+    except:
+        mgr = None
+
+    aspects = list(mgr.aspects.values()) if mgr else []
+    consequences = mgr.consequences if mgr else {}
+
+    # Build column headers: one per aspect
+    headers = [a.name for a in aspects]
+
+    # Build rows: short name + one level value per aspect
+    table_rows = []
+    for short_name, consequence in consequences.items():
+        levels = [consequence[a.name] or "" for a in aspects]
+        table_rows.append({
+            "short_name": short_name,
+            "levels": levels
+        })
+
+    return render_template(
+        "consequences.html",
+        headers=headers,
+        rows=table_rows
+    )
+
 @app.get("/api/consequences")
 def get_consequences():
     mgr = load_manager_or_400()
