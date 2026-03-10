@@ -8,3 +8,13 @@
   font-weight: bold;
   white-space: nowrap;
 }
+
+/* Links in column headers */
+.consequences-table th a {
+  color: #0066cc;
+  text-decoration: none;
+}
+
+.consequences-table th a:hover {
+  text-decoration: underline;
+}
