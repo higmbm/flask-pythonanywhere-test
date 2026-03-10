@@ -2,16 +2,95 @@
    index.css  —  Page-specific styles for index.html
    ============================================================ */
 
+/* Ensure hidden attribute always wins over any display value */
+[hidden] {
+  display: none !important;
+}
+
+/* ── Project header ────────────────────────────────────────── */
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* ── Action panel (manage project / create project) ─────────── */
 .action-panel {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
-/* Ensure hidden attribute always wins over display:flex */
-[hidden] {
-  display: none !important;
+/* ── Sections ──────────────────────────────────────────────── */
+.section {
+  margin-top: 2rem;
+}
+
+.section h2 {
+  margin-bottom: 0.75rem;
+}
+
+/* ── Add forms (aspects and consequences) ──────────────────── */
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 600px;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.form-row label {
+  min-width: 140px;
+  font-weight: normal;
+}
+
+.form-row select,
+.form-row input[type="text"] {
+  flex: 1;
+}
+
+.hybrid-input {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.hybrid-input select {
+  flex: 1;
+}
+
+.hybrid-input input {
+  flex: 1;
+}
+
+/* ── New levels notice ─────────────────────────────────────── */
+.new-levels-notice {
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.7rem;
+  background: #e8f4e8;
+  border: 1px solid #7cb97c;
+  border-radius: 6px;
+  color: #2e6b2e;
+  font-size: 0.9rem;
+}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+button.primary {
+  background: #0b5cff;
+  border-color: #0b5cff;
+  color: white;
+}
+
+button.primary:hover {
+  background: #0048d4;
 }
 
 button.danger {
@@ -22,4 +101,75 @@ button.danger {
 
 button.danger:hover {
   background: #8c0019;
+}
+
+button.secondary {
+  background: #f6f6f6;
+  border-color: #999;
+  color: #333;
+}
+
+button.secondary:hover {
+  background: #ebebeb;
+}
+
+/* ── Consequence space dialog ──────────────────────────────── */
+dialog {
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  padding: 1.5rem;
+  max-width: 90vw;
+  max-height: 80vh;
+}
+
+dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dialog-header h2 {
+  margin: 0;
+}
+
+.dialog-table-wrapper {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Named consequence rows highlighted in light green */
+#consequenceSpaceTable tbody tr.named-consequence {
+  background: #d4edda;
+}
+
+#consequenceSpaceTable tbody tr {
+  cursor: pointer;
+}
+
+#consequenceSpaceTable tbody tr:hover {
+  background: #cce5ff;
+}
+
+#consequenceSpaceTable tbody tr.named-consequence:hover {
+  background: #b8dfc4;
+}
+
+/* Small green swatch in the dialog hint text */
+.named-marker {
+  display: inline-block;
+  background: #d4edda;
+  border: 1px solid #7cb97c;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  font-size: 0.85rem;
 }

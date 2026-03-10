@@ -9,31 +9,112 @@
 </head>
 <body>
 
-  <!-- Server-side state passed to JS via data attribute -->
-  <div id="appState" data-has-project="{{ 'true' if project_name else 'false' }}" hidden></div>
+  <!-- Server-side state for JS -->
+  <div id="appState"
+       data-has-project="{{ 'true' if project_name else 'false' }}"
+       data-project-name="{{ project_name or '' }}"
+       hidden></div>
 
   {% if project_name %}
-    <!-- Project exists: show name and Manage button -->
-    <p>
+
+    <!-- ── Project header ───────────────────────────────────── -->
+    <p class="project-header">
       <strong>Current project:</strong>
       <span class="muted">{{ project_name }}</span>
       <button id="btnManage">Manage project</button>
     </p>
 
-    <!-- Management panel (hidden until Manage is clicked) -->
+    <!-- Manage panel (hidden until toggled) -->
     <div id="managePanel" class="action-panel" hidden>
-      <label for="project_name">New name:</label>
-      <input id="project_name" type="text" value="{{ project_name }}">
+      <label for="inputProjectName">New name:</label>
+      <input id="inputProjectName" type="text" value="{{ project_name }}">
       <button id="btnRename">Rename (PUT)</button>
       <button id="btnDelete" class="danger">Delete (DELETE)</button>
     </div>
 
+    <!-- ── Aspects ──────────────────────────────────────────── -->
+    <section class="section">
+      <h2>Aspects</h2>
+      <div id="aspectsContainer">
+        <p class="muted">Loading...</p>
+      </div>
+
+      <!-- Add aspect form -->
+      <div class="add-form" id="addAspectForm">
+        <div class="form-row">
+          <label>Name</label>
+          <input id="inputAspectName" type="text" placeholder="e.g. Economy">
+        </div>
+        <div class="form-row">
+          <label>Type</label>
+          <select id="inputAspectType">
+            <option value="str">str</option>
+            <option value="int">int</option>
+            <option value="float">float</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Description</label>
+          <input id="inputAspectDesc" type="text" placeholder="Optional">
+        </div>
+        <div class="form-row">
+          <button id="btnAddAspect" class="primary">Add aspect (POST)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Named consequences ───────────────────────────────── -->
+    <section class="section" id="consequencesSection" hidden>
+      <h2>Consequences</h2>
+      <div id="consequencesContainer">
+        <p class="muted">Loading...</p>
+      </div>
+      <button id="btnShowConsequenceSpace">Show consequence space</button>
+    </section>
+
+    <!-- ── Add consequence form ─────────────────────────────── -->
+    <section class="section" id="addConsequenceSection" hidden>
+      <h2>Add consequence</h2>
+      <div class="add-form">
+        <div class="form-row">
+          <label>Short name</label>
+          <input id="inputShortName" type="text" placeholder="e.g. C1">
+        </div>
+        <!-- Aspect rows injected here by JS -->
+        <div id="aspectFormRows"></div>
+        <div class="form-row">
+          <button id="btnAddConsequence" class="primary">Add consequence (POST)</button>
+          <button id="btnClearForm">Clear form</button>
+        </div>
+        <p id="newLevelsNotice" class="new-levels-notice" hidden></p>
+      </div>
+    </section>
+
+    <!-- ── Consequence space dialog ─────────────────────────── -->
+    <dialog id="consequenceSpaceDialog">
+      <div class="dialog-header">
+        <h2>Consequence space</h2>
+        <button id="btnCloseDialog" class="secondary">Close</button>
+      </div>
+      <p class="hint">
+        Highlighted rows (<span class="named-marker">green</span>) are already
+        named consequences. Click any row to pre-fill the add-consequence form.
+      </p>
+      <div class="dialog-table-wrapper">
+        <table class="data-table" id="consequenceSpaceTable">
+          <thead><tr id="consequenceSpaceHeaders"></tr></thead>
+          <tbody id="consequenceSpaceBody"></tbody>
+        </table>
+      </div>
+    </dialog>
+
   {% else %}
-    <!-- No project: show create form immediately -->
+
+    <!-- ── No project: create form ──────────────────────────── -->
     <div class="action-panel">
-      <label for="project_name">Project name:</label>
-      <input id="project_name" type="text" placeholder="Enter project name">
-      <button id="btnCreate">Create (POST)</button>
+      <label for="inputProjectName">Project name:</label>
+      <input id="inputProjectName" type="text" placeholder="Enter project name">
+      <button id="btnCreate" class="primary">Create (POST)</button>
     </div>
 
   {% endif %}
@@ -43,34 +124,32 @@
   {% endif %}
 
   <script>
-    const hasProject = document.getElementById("appState").dataset.hasProject === "true";
+    const NEW_LEVEL_SENTINEL = "__new__";
 
-    // ---- Toggle manage panel ----
+    const appState   = document.getElementById("appState");
+    const hasProject = appState.dataset.hasProject === "true";
+
+    // ── Manage project ─────────────────────────────────────────
     const btnManage   = document.getElementById("btnManage");
     const managePanel = document.getElementById("managePanel");
-
     if (btnManage) {
       btnManage.addEventListener("click", () => {
         managePanel.hidden = !managePanel.hidden;
       });
     }
 
-    // ---- Rename ----
     const btnRename = document.getElementById("btnRename");
     if (btnRename) {
       btnRename.addEventListener("click", async () => {
-        const name = document.getElementById("project_name").value.trim();
+        const name = document.getElementById("inputProjectName").value.trim();
         if (!name) { alert("Project name must be non-empty."); return; }
-
         const res = await fetch("/api/project", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_name: name })
         });
-
-        if (res.ok) {
-          location.reload();
-        } else {
+        if (res.ok) { location.reload(); }
+        else {
           let msg = `${res.status} ${res.statusText}`;
           try { const j = await res.json(); msg = j.error || msg; } catch {}
           alert(msg);
@@ -78,40 +157,359 @@
       });
     }
 
-    // ---- Delete ----
     const btnDelete = document.getElementById("btnDelete");
     if (btnDelete) {
       btnDelete.addEventListener("click", async () => {
         const res = await fetch("/api/project", { method: "DELETE" });
-        if (res.status === 204) {
-          location.reload();
-        } else {
-          alert("Error deleting project.");
-        }
+        if (res.status === 204) { location.reload(); }
+        else { alert("Error deleting project."); }
       });
     }
 
-    // ---- Create ----
     const btnCreate = document.getElementById("btnCreate");
     if (btnCreate) {
       btnCreate.addEventListener("click", async () => {
-        const name = document.getElementById("project_name").value.trim();
+        const name = document.getElementById("inputProjectName").value.trim();
         if (!name) { alert("Project name must be non-empty."); return; }
-
         const res = await fetch("/api/project", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project_name: name })
         });
+        if (res.ok) { location.reload(); }
+        else {
+          let msg = `${res.status} ${res.statusText}`;
+          try { const j = await res.json(); msg = j.error || msg; } catch {}
+          alert(msg);
+        }
+      });
+    }
+
+    // ── Load and render aspects table ──────────────────────────
+    let aspectData = [];  // [{name, dtype, description, levels[]}]
+
+    async function loadAspects() {
+      const res = await fetch("/api/aspects");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      aspectData = data.rows.map(row => ({
+        name:        row[0],
+        dtype:       row[1],
+        description: row[2],
+        levels:      row[3] ? row[3].split(", ").filter(Boolean) : []
+      }));
+
+      // Render aspects table
+      const container = document.getElementById("aspectsContainer");
+      if (aspectData.length === 0) {
+        container.innerHTML = "<p class='muted'>No aspects defined yet.</p>";
+      } else {
+        const table = document.createElement("table");
+        table.className = "data-table";
+        const thead = table.createTHead();
+        const hRow  = thead.insertRow();
+        ["Name", "Type", "Description"].forEach(h => {
+          const th = document.createElement("th");
+          th.textContent = h;
+          hRow.appendChild(th);
+        });
+        const tbody = table.createTBody();
+        aspectData.forEach(({ name, dtype, description }) => {
+          const tr = tbody.insertRow();
+          [name, dtype, description].forEach(val => {
+            const td = tr.insertCell();
+            td.textContent = val;
+          });
+        });
+        container.innerHTML = "";
+        container.appendChild(table);
+      }
+
+      // Show/hide consequence sections based on whether aspects exist
+      const hasAspects = aspectData.length > 0;
+      document.getElementById("consequencesSection").hidden    = !hasAspects;
+      document.getElementById("addConsequenceSection").hidden  = !hasAspects;
+
+      // Rebuild add-consequence form rows
+      const formRowsEl = document.getElementById("aspectFormRows");
+      if (formRowsEl) {
+        formRowsEl.innerHTML = "";
+        aspectData.forEach(({ name, levels }) => {
+          const formRow = document.createElement("div");
+          formRow.className = "form-row";
+          const label = document.createElement("label");
+          label.textContent = name;
+          formRow.appendChild(label);
+          formRow.appendChild(buildHybridInput(name, levels));
+          formRowsEl.appendChild(formRow);
+        });
+      }
+    }
+
+    // ── Add aspect ─────────────────────────────────────────────
+    const btnAddAspect = document.getElementById("btnAddAspect");
+    if (btnAddAspect) {
+      btnAddAspect.addEventListener("click", async () => {
+        const name        = document.getElementById("inputAspectName").value.trim();
+        const data_type   = document.getElementById("inputAspectType").value;
+        const description = document.getElementById("inputAspectDesc").value.trim() || null;
+
+        if (!name) { alert("Aspect name must be non-empty."); return; }
+
+        const res = await fetch("/api/aspects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, data_type, description })
+        });
 
         if (res.ok) {
-          location.reload();
+          // Clear inputs and refresh
+          document.getElementById("inputAspectName").value = "";
+          document.getElementById("inputAspectType").value = "str";
+          document.getElementById("inputAspectDesc").value = "";
+          await loadAspects();
+          await loadConsequences();
         } else {
           let msg = `${res.status} ${res.statusText}`;
           try { const j = await res.json(); msg = j.error || msg; } catch {}
           alert(msg);
         }
       });
+    }
+
+    // ── Hybrid dropdown/text input ─────────────────────────────
+    function buildHybridInput(aspectName, levels) {
+      const container = document.createElement("div");
+      container.className = "hybrid-input";
+      container.dataset.aspect = aspectName;
+
+      const select = document.createElement("select");
+      select.className = "level-select";
+
+      const blankOpt = document.createElement("option");
+      blankOpt.value = "";
+      blankOpt.textContent = "— select level —";
+      select.appendChild(blankOpt);
+
+      levels.forEach(level => {
+        const opt = document.createElement("option");
+        opt.value = level;
+        opt.textContent = level;
+        select.appendChild(opt);
+      });
+
+      const newOpt = document.createElement("option");
+      newOpt.value = NEW_LEVEL_SENTINEL;
+      newOpt.textContent = "New level...";
+      select.appendChild(newOpt);
+
+      const textInput = document.createElement("input");
+      textInput.type = "text";
+      textInput.className = "level-text";
+      textInput.placeholder = "New level value";
+      textInput.hidden = true;
+
+      select.addEventListener("change", () => {
+        const isNew = select.value === NEW_LEVEL_SENTINEL;
+        textInput.hidden = !isNew;
+        if (isNew) { textInput.value = ""; textInput.focus(); }
+      });
+
+      container.appendChild(select);
+      container.appendChild(textInput);
+      return container;
+    }
+
+    // ── Load consequences and render table ─────────────────────
+    async function loadConsequences() {
+      const container = document.getElementById("consequencesContainer");
+      if (!container) return;
+
+      const res = await fetch("/api/consequences");
+      if (!res.ok) { container.innerHTML = "<p class='error'>Failed to load consequences.</p>"; return; }
+      const data = await res.json();
+
+      if (!data.rows || data.rows.length === 0) {
+        container.innerHTML = "<p class='muted'>No consequences defined yet.</p>";
+        return;
+      }
+
+      const table = document.createElement("table");
+      table.className = "data-table";
+      table.id = "consequencesTable";
+
+      const thead = table.createTHead();
+      const hRow  = thead.insertRow();
+      ["Short name", ...aspectData.map(a => a.name)].forEach(h => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        hRow.appendChild(th);
+      });
+
+      const tbody = table.createTBody();
+      data.rows.forEach(row => {
+        const tr = tbody.insertRow();
+        row.forEach((cell, i) => {
+          const td = tr.insertCell();
+          if (i === 0) { const b = document.createElement("strong"); b.textContent = cell; td.appendChild(b); }
+          else { td.textContent = cell; }
+        });
+      });
+
+      container.innerHTML = "";
+      container.appendChild(table);
+    }
+
+    // ── Helper: get level value from a hybrid input ────────────
+    function getLevelValue(aspectName) {
+      const container = document.querySelector(
+        `.hybrid-input[data-aspect="${CSS.escape(aspectName)}"]`
+      );
+      if (!container) return "";
+      const select    = container.querySelector(".level-select");
+      const textInput = container.querySelector(".level-text");
+      return select.value === NEW_LEVEL_SENTINEL ? textInput.value.trim() : select.value;
+    }
+
+    // ── Add consequence ────────────────────────────────────────
+    const btnAddConsequence = document.getElementById("btnAddConsequence");
+    if (btnAddConsequence) {
+      btnAddConsequence.addEventListener("click", async () => {
+        const shortName = document.getElementById("inputShortName").value.trim();
+        if (!shortName) { alert("Short name must be non-empty."); return; }
+
+        const payload = {};
+        let valid = true;
+        aspectData.forEach(({ name }) => {
+          const value = getLevelValue(name);
+          if (!value) { alert(`Please enter a level for aspect "${name}".`); valid = false; }
+          payload[name] = value;
+        });
+        if (!valid) return;
+
+        const res = await fetch("/api/consequences", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ short_name: shortName, aspect_levels: payload })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const newLevels = json.new_levels || [];
+          const notice = document.getElementById("newLevelsNotice");
+          if (newLevels.length > 0) {
+            notice.textContent = "New levels added: " + newLevels.join(", ");
+            notice.hidden = false;
+          } else {
+            notice.hidden = true;
+          }
+          document.getElementById("inputShortName").value = "";
+          await loadAspects();
+          await loadConsequences();
+        } else {
+          let msg = `${res.status} ${res.statusText}`;
+          try { const j = await res.json(); msg = j.error || msg; } catch {}
+          alert(msg);
+        }
+      });
+    }
+
+    const btnClearForm = document.getElementById("btnClearForm");
+    if (btnClearForm) {
+      btnClearForm.addEventListener("click", () => {
+        document.getElementById("inputShortName").value = "";
+        document.querySelectorAll(".hybrid-input").forEach(container => {
+          container.querySelector(".level-select").value = "";
+          const ti = container.querySelector(".level-text");
+          ti.value = ""; ti.hidden = true;
+        });
+        const notice = document.getElementById("newLevelsNotice");
+        if (notice) notice.hidden = true;
+      });
+    }
+
+    // ── Consequence space dialog ───────────────────────────────
+    const dialog   = document.getElementById("consequenceSpaceDialog");
+    const btnShow  = document.getElementById("btnShowConsequenceSpace");
+    const btnClose = document.getElementById("btnCloseDialog");
+
+    function getNamedLevelTuples() {
+      const named = new Set();
+      const table = document.getElementById("consequencesTable");
+      if (!table) return named;
+      table.querySelectorAll("tbody tr").forEach(tr => {
+        const cells = Array.from(tr.querySelectorAll("td")).slice(1);
+        named.add(JSON.stringify(cells.map(td => td.textContent.trim())));
+      });
+      return named;
+    }
+
+    async function openConsequenceSpaceDialog() {
+      const res = await fetch("/api/consequence_space");
+      if (!res.ok) { alert("Could not load consequence space."); return; }
+      const data = await res.json();
+
+      const headersRow = document.getElementById("consequenceSpaceHeaders");
+      headersRow.innerHTML = "";
+      data.headers.forEach(h => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        headersRow.appendChild(th);
+      });
+
+      const tbody = document.getElementById("consequenceSpaceBody");
+      tbody.innerHTML = "";
+      const namedSets = getNamedLevelTuples();
+
+      data.rows.forEach(row => {
+        const tr = document.createElement("tr");
+        if (namedSets.has(JSON.stringify(row))) tr.classList.add("named-consequence");
+
+        row.forEach(cell => {
+          const td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+
+        tr.addEventListener("click", () => {
+          data.headers.forEach((aspectName, i) => {
+            const container = document.querySelector(
+              `.hybrid-input[data-aspect="${CSS.escape(aspectName)}"]`
+            );
+            if (!container) return;
+            const select    = container.querySelector(".level-select");
+            const textInput = container.querySelector(".level-text");
+            const value     = row[i];
+            const exists    = Array.from(select.options).some(o => o.value === value);
+            if (exists) {
+              select.value = value;
+              textInput.hidden = true;
+            } else {
+              select.value = NEW_LEVEL_SENTINEL;
+              textInput.hidden = false;
+              textInput.value = value;
+            }
+          });
+          dialog.close();
+          document.getElementById("inputShortName").focus();
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      dialog.showModal();
+    }
+
+    if (btnShow)  btnShow.addEventListener("click", openConsequenceSpaceDialog);
+    if (btnClose) btnClose.addEventListener("click", () => dialog.close());
+    if (dialog) {
+      dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
+    }
+
+    // ── Initial load ───────────────────────────────────────────
+    if (hasProject) {
+      loadAspects().then(loadConsequences);
     }
   </script>
 </body>

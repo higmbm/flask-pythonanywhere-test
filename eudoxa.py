@@ -376,6 +376,15 @@ class EudoxaManager:
         if not aspect_levels.keys() == self.aspects.keys():
             raise ValueError("Aspect keys do not match.")
 
+        # Normalise to strings for comparison (mirrors what is stored)
+        normalised = {k: str(v) for k, v in aspect_levels.items()}
+        for existing_name, existing_cons in self.consequences.items():
+            if all(existing_cons[a] == normalised[a] for a in self.aspects):
+                raise ValueError(
+                    f"Consequence '{short_name}' is identical to "
+                    f"existing consequence '{existing_name}'."
+                )
+
         c = Consequence(aspect_levels)
         logger.debug(f"Adding '{short_name}' to consequence set.")
         for aspect_name, level in aspect_levels.items():

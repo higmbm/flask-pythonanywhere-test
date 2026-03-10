@@ -277,24 +277,19 @@ def consequences_html():
 
 @app.get("/api/consequences")
 def get_consequences():
+    # Returns named consequences as JSON:
+    # { "headers": ["Short name", aspect1, ...], "rows": [[short_name, level1, ...], ...] }
     mgr = load_manager_or_400()
 
-    aspects = getattr(mgr, "aspects", []) or []
-    consequences = getattr(mgr, "consequences", []) or []
-
-    def dtype(a):
-        return getattr(a, "type", None) or getattr(a, "data_type", "")
-
-    headers = ["Consequence"] + [f"{a.name} ({dtype(a)})" for a in aspects]
+    aspects = list(mgr.aspects.values())
+    headers = ["Short name"] + [a.name for a in aspects]
 
     rows = []
-    for cons in consequences:
-        short = getattr(cons, "short_name", "") or getattr(cons, "short", "") or ""
-        aspect_levels = getattr(cons, "aspect_levels", {}) or {}
-        row = [short]
-        for a in aspects:
-            level = aspect_levels.get(a.name, "")
-            row.append("" if level is None else str(level))
+    for short_name, consequence in mgr.consequences.items():
+        row = [short_name] + [
+            "" if consequence[a.name] is None else str(consequence[a.name])
+            for a in aspects
+        ]
         rows.append(row)
 
     return {"headers": headers, "rows": rows}, 200
@@ -331,12 +326,12 @@ def add_consequence():
     levels = data["aspect_levels"]
 
     try:
-        mgr.add_consequence(short, levels)
+        new_levels = mgr.add_consequence(short, levels)
     except Exception as e:
         return {"error": str(e)}, 400
 
     save_manager(mgr)
-    return {"message": "Consequence added"}, 201
+    return {"message": "Consequence added", "new_levels": new_levels}, 201
 
 
 # -----------------------------------------------------------
