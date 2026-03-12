@@ -251,15 +251,27 @@
         tbody.innerHTML = "";
         aspectData.forEach(({ name, dtype, description }) => {
           const tr = document.createElement("tr");
-          [name, dtype].forEach(val => {
-            const td = document.createElement("td");
-            td.textContent = val;
-            tr.appendChild(td);
-          });
+
+          // Name cell — links to aspect detail page
+          const nameTd = document.createElement("td");
+          const nameLink = document.createElement("a");
+          nameLink.href = `/aspects/${encodeURIComponent(name)}`;
+          nameLink.textContent = name;
+          nameLink.className = "aspect-name-link";
+          nameTd.appendChild(nameLink);
+          tr.appendChild(nameTd);
+
+          // Type cell
+          const typeTd = document.createElement("td");
+          typeTd.textContent = dtype;
+          tr.appendChild(typeTd);
+
+          // Description cell — inline editable
           const descTd = document.createElement("td");
           descTd.textContent = description;
           makeDescriptionCellEditable(descTd, name);
           tr.appendChild(descTd);
+
           tbody.appendChild(tr);
         });
       }

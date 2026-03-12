@@ -30,7 +30,7 @@
     <tbody>
     {% for row in rows %}
       <tr>
-        <td>{{ row.name }}</td>
+        <td><a href="/aspects/{{ row.name }}">{{ row.name }}</a></td>
         <td>{{ row.dtype }}</td>
         <td class="editable-desc" data-aspect="{{ row.name }}" title="Click to edit description">{{ row.description }}</td>
         <td class="num-cell"><a href="/aspects/{{ row.name }}/levels">{{ row.n_levels }}</a></td>

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Aspect: {{ aspect_name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/aspect_detail.css') }}">
+</head>
+<body>
+
+  <p class="back-link"><a id="backLink" href="/aspects" data-aspect="{{ aspect_name }}">&larr; Back</a></p>
+  <script>
+    const ref = document.referrer;
+    if (ref) { document.getElementById("backLink").href = ref; }
+  </script>
+
+  <!-- ── Aspect summary ──────────────────────────────────────── -->
+  <dl class="aspect-summary">
+    <dt>Name</dt>
+    <dd>{{ aspect_name }}</dd>
+    <dt>Type</dt>
+    <dd>{{ dtype }}</dd>
+    <dt>Description</dt>
+    <dd class="editable-desc"
+        data-aspect="{{ aspect_name }}"
+        title="Click to edit description">{{ description }}</dd>
+  </dl>
+
+  <!-- ── Levels ──────────────────────────────────────────────── -->
+  <h2>Levels</h2>
+  <table class="data-table levels-table">
+    <thead>
+      <tr>
+        <th>Level</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody id="levelsBody">
+      {% if level_rows %}
+        {% for row in level_rows %}
+        <tr>
+          <td>{{ row.level }}</td>
+          <td>{{ row.description }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="2" class="muted">No levels defined yet.</td></tr>
+      {% endif %}
+    </tbody>
+    <tfoot class="add-level-foot">
+      <tr class="add-level-inputs">
+        <td><input id="inputLevel" type="text" placeholder="e.g. High"></td>
+        <td><input id="inputLevelDesc" type="text" placeholder="Optional"></td>
+      </tr>
+      <tr class="add-level-action">
+        <td colspan="2">
+          <div class="add-level-action-row">
+            <span class="action-spacer"></span>
+            <button id="btnAddLevel" class="primary">Add level</button>
+            <button id="btnClearLevel">Clear</button>
+          </div>
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <p id="addLevelError" class="error" hidden></p>
+
+  <script>
+    const ASPECT_NAME = document.getElementById("backLink").dataset.aspect;
+
+    // ── Inline description editing ───────────────────────────────
+    const descTd = document.querySelector("dd.editable-desc");
+    if (descTd) attachDescEdit(descTd, descTd.dataset.aspect);
+
+    function attachDescEdit(td, aspectName) {
+      td.addEventListener("click", handler);
+      function handler() {
+        if (td.querySelector("input")) return;
+        const original = td.textContent;
+        td.textContent = "";
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = original;
+        input.className = "desc-edit-input";
+
+        const setBtn    = document.createElement("button");
+        setBtn.textContent = "Set";
+        setBtn.className   = "primary desc-edit-btn";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.className   = "desc-edit-btn";
+
+        async function commit() {
+          const newDesc = input.value.trim();
+          const res = await fetch(`/api/aspects/${encodeURIComponent(aspectName)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ description: newDesc || null })
+          });
+          if (res.ok) {
+            td.textContent = newDesc;
+            attachDescEdit(td, aspectName);
+          } else {
+            let msg = `${res.status} ${res.statusText}`;
+            try { const j = await res.json(); msg = j.error || msg; } catch {}
+            alert(msg);
+          }
+        }
+
+        function cancel() {
+          td.textContent = original;
+          attachDescEdit(td, aspectName);
+        }
+
+        setBtn.addEventListener("click", commit);
+        cancelBtn.addEventListener("click", cancel);
+        input.addEventListener("keydown", e => {
+          if (e.key === "Enter")  { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        });
+
+        td.appendChild(input);
+        td.appendChild(setBtn);
+        td.appendChild(cancelBtn);
+        input.focus();
+        input.select();
+      }
+    }
+
+    // ── Add level ────────────────────────────────────────────────
+    const btnAddLevel  = document.getElementById("btnAddLevel");
+    const btnClearLevel = document.getElementById("btnClearLevel");
+    const errEl        = document.getElementById("addLevelError");
+
+    function clearLevelForm() {
+      document.getElementById("inputLevel").value     = "";
+      document.getElementById("inputLevelDesc").value = "";
+      errEl.hidden = true;
+    }
+
+    btnClearLevel.addEventListener("click", clearLevelForm);
+
+    btnAddLevel.addEventListener("click", async () => {
+      const level       = document.getElementById("inputLevel").value.trim();
+      const description = document.getElementById("inputLevelDesc").value.trim() || null;
+
+      if (!level) { errEl.textContent = "Level must be non-empty."; errEl.hidden = false; return; }
+
+      const res = await fetch(`/api/aspects/${encodeURIComponent(ASPECT_NAME)}/levels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level, description })
+      });
+
+      if (res.ok) {
+        // Append the new row to the tbody rather than reloading
+        const tbody = document.getElementById("levelsBody");
+        // Remove placeholder row if present
+        const placeholder = tbody.querySelector("td[colspan]");
+        if (placeholder) placeholder.closest("tr").remove();
+
+        const tr = document.createElement("tr");
+        [level, description || ""].forEach(val => {
+          const td = document.createElement("td");
+          td.textContent = val;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+        clearLevelForm();
+        document.getElementById("inputLevel").focus();
+      } else {
+        let msg = `${res.status} ${res.statusText}`;
+        try { const j = await res.json(); msg = j.error || msg; } catch {}
+        errEl.textContent = msg;
+        errEl.hidden = false;
+      }
+    });
+  </script>
+
+</body>
+</html>

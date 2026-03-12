@@ -198,6 +198,30 @@ def list_aspects():
 # -----------------------------------------------------------
 #  REST: LEVELS
 # -----------------------------------------------------------
+@app.get("/aspects/<aspect_name>")
+def aspect_detail(aspect_name):
+    mgr = load_manager_or_400()
+    aspect = mgr.aspects.get(aspect_name)
+    if not aspect:
+        abort(404, f"Aspect '{aspect_name}' not found")
+
+    dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
+
+    level_rows = []
+    for level_name, description in aspect.levels.items():
+        level_rows.append({
+            "level": level_name,
+            "description": "" if description is None else str(description)
+        })
+
+    return render_template(
+        "aspect_detail.html",
+        aspect_name=aspect_name,
+        dtype=dtype,
+        description=aspect.description or "",
+        level_rows=level_rows
+    )
+
 @app.get("/aspects/<aspect_name>/levels")
 def levels_html(aspect_name):
     mgr = load_manager_or_400()

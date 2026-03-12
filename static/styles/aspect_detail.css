@@ -1,0 +1,81 @@
+/* ============================================================
+   aspect_detail.css  –  Styles for aspect_detail.html
+   ============================================================ */
+
+/* ── Aspect summary (definition list) ──────────────────────── */
+.aspect-summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1.2rem;
+  margin-bottom: 2rem;
+  max-width: 600px;
+}
+
+.aspect-summary dt {
+  font-weight: 600;
+  color: #555;
+  align-self: baseline;
+}
+
+.aspect-summary dd {
+  margin: 0;
+  align-self: baseline;
+}
+
+.aspect-summary dd.editable-desc {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+}
+
+.aspect-summary dd.editable-desc:hover {
+  background: #f0f4ff;
+}
+
+.aspect-summary dd.editable-desc:empty::before {
+  content: "—";
+  color: #bbb;
+}
+
+/* ── Levels table ───────────────────────────────────────────── */
+.levels-table {
+  max-width: 600px;
+}
+
+/* ── Add-level tfoot ────────────────────────────────────────── */
+.add-level-foot tr.add-level-inputs td {
+  background: #f0f4ff;
+  border-top: 2px solid #7aa0e0;
+  padding: 6px 8px;
+}
+
+.add-level-foot tr.add-level-inputs td input {
+  width: 100%;
+}
+
+.add-level-foot tr.add-level-action td {
+  background: #f0f4ff;
+  border-top: none;
+  padding: 6px 8px 8px;
+}
+
+.add-level-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-spacer {
+  flex: 1;
+}
+
+/* ── Button colours ─────────────────────────────────────────── */
+button.primary {
+  background: #0b5cff;
+  border-color: #0b5cff;
+  color: white;
+}
+
+button.primary:hover {
+  background: #0048d4;
+}
