@@ -113,13 +113,13 @@ def aspects_html():
     table_rows = []
     for name, aspect in aspects.items():
         dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
-        level_names = ", ".join(str(lvl) for lvl in aspect.levels.keys())
+        n_levels = len(aspect.levels)
         n_vdiffs = len(aspect.vdiffs)
         table_rows.append({
             "name": name,
             "dtype": dtype,
             "description": aspect.description or "",
-            "levels": level_names,
+            "n_levels": n_levels,
             "vdiffs": n_vdiffs
         })
 

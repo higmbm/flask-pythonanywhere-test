@@ -2,9 +2,20 @@
    aspects.css  –  Page-specific styles for aspects.html
    ============================================================ */
 
-.aspects-table td:last-child,
-.aspects-table th:last-child {
-  text-align: right; /* right-align the #Δ count column */
+.aspects-table td:nth-child(4),
+.aspects-table th:nth-child(4),
+.aspects-table td:nth-child(5),
+.aspects-table th:nth-child(5) {
+  text-align: right;
+}
+
+.aspects-table td.num-cell a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.aspects-table td.num-cell a:hover {
+  text-decoration: underline;
 }
 
 /* ── Add-aspect tfoot ──────────────────────────────────────── */
