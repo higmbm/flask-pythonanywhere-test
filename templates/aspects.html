@@ -38,7 +38,70 @@
       </tr>
       {% endfor %}
     </tbody>
+    <tfoot class="add-aspect-foot">
+      <tr class="add-aspect-inputs">
+        <td><input id="inputAspectName" type="text" placeholder="e.g. Economy"></td>
+        <td>
+          <select id="inputAspectType">
+            <option value="str">str</option>
+            <option value="int">int</option>
+            <option value="float">float</option>
+          </select>
+        </td>
+        <td><input id="inputAspectDesc" type="text" placeholder="Optional"></td>
+        <td colspan="2" class="add-aspect-computed-cols"></td>
+      </tr>
+      <tr class="add-aspect-action">
+        <td colspan="5">
+          <div class="add-aspect-action-row">
+            <span class="action-spacer"></span>
+            <button id="btnAddAspect" class="primary">Add aspect</button>
+            <button id="btnClearAspectForm">Clear</button>
+          </div>
+        </td>
+      </tr>
+    </tfoot>
   </table>
+
+  <p id="addAspectError" class="error" hidden></p>
+
+  <script>
+    const btnAdd   = document.getElementById("btnAddAspect");
+    const btnClear = document.getElementById("btnClearAspectForm");
+    const errEl    = document.getElementById("addAspectError");
+
+    function clearForm() {
+      document.getElementById("inputAspectName").value = "";
+      document.getElementById("inputAspectType").value = "str";
+      document.getElementById("inputAspectDesc").value = "";
+      errEl.hidden = true;
+    }
+
+    btnClear.addEventListener("click", clearForm);
+
+    btnAdd.addEventListener("click", async () => {
+      const name        = document.getElementById("inputAspectName").value.trim();
+      const data_type   = document.getElementById("inputAspectType").value;
+      const description = document.getElementById("inputAspectDesc").value.trim() || null;
+
+      if (!name) { errEl.textContent = "Aspect name must be non-empty."; errEl.hidden = false; return; }
+
+      const res = await fetch("/api/aspects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, data_type, description })
+      });
+
+      if (res.ok) {
+        location.reload();
+      } else {
+        let msg = `${res.status} ${res.statusText}`;
+        try { const j = await res.json(); msg = j.error || msg; } catch {}
+        errEl.textContent = msg;
+        errEl.hidden = false;
+      }
+    });
+  </script>
 
 </body>
 </html>

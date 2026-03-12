@@ -2,10 +2,50 @@
    aspects.css  –  Page-specific styles for aspects.html
    ============================================================ */
 
-/* The aspects table should fill the full container width,
-   which is already handled by .data-table in common.css.
-   Add any aspects-only overrides below. */
-
-.aspects-table td:last-child {
+.aspects-table td:last-child,
+.aspects-table th:last-child {
   text-align: right; /* right-align the #Δ count column */
+}
+
+/* ── Add-aspect tfoot ──────────────────────────────────────── */
+.add-aspect-foot tr.add-aspect-inputs td {
+  background: #f0f4ff;
+  border-top: 2px solid #7aa0e0;
+  padding: 6px 8px;
+}
+
+.add-aspect-foot tr.add-aspect-inputs td input,
+.add-aspect-foot tr.add-aspect-inputs td select {
+  width: 100%;
+}
+
+.add-aspect-foot td.add-aspect-computed-cols {
+  background: #f0f4ff;
+}
+
+.add-aspect-foot tr.add-aspect-action td {
+  background: #f0f4ff;
+  border-top: none;
+  padding: 6px 8px 8px;
+}
+
+.add-aspect-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-spacer {
+  flex: 1;
+}
+
+/* ── Button colours (mirrors index.css) ────────────────────── */
+button.primary {
+  background: #0b5cff;
+  border-color: #0b5cff;
+  color: white;
+}
+
+button.primary:hover {
+  background: #0048d4;
 }
