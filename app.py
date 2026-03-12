@@ -125,6 +125,20 @@ def aspects_html():
 
     return render_template("aspects.html", rows=table_rows)
 
+@app.patch("/api/aspects/<aspect_name>")
+def patch_aspect(aspect_name):
+    mgr = load_manager_or_400()
+    aspect = mgr.aspects.get(aspect_name)
+    if not aspect:
+        return {"error": f"Aspect '{aspect_name}' not found"}, 404
+
+    data = request.get_json(silent=True) or {}
+    if "description" in data:
+        aspect.add_description(data["description"] or None)
+
+    save_manager(mgr)
+    return {"message": "Aspect updated"}, 200
+
 @app.get("/api/aspect-names")
 def get_aspect_names():
     mgr = load_manager_or_400()

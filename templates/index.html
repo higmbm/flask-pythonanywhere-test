@@ -250,11 +250,17 @@
       } else {
         tbody.innerHTML = "";
         aspectData.forEach(({ name, dtype, description }) => {
-          const tr = tbody.insertRow();
-          [name, dtype, description].forEach(val => {
-            const td = tr.insertCell();
+          const tr = document.createElement("tr");
+          [name, dtype].forEach(val => {
+            const td = document.createElement("td");
             td.textContent = val;
+            tr.appendChild(td);
           });
+          const descTd = document.createElement("td");
+          descTd.textContent = description;
+          makeDescriptionCellEditable(descTd, name);
+          tr.appendChild(descTd);
+          tbody.appendChild(tr);
         });
       }
 
@@ -264,6 +270,66 @@
 
       // Rebuild consequences table header and add-row
       rebuildConsequenceTableStructure();
+    }
+
+    // ── Inline description editing ─────────────────────────────
+    function makeDescriptionCellEditable(td, aspectName) {
+      td.classList.add("editable-desc");
+      td.title = "Click to edit description";
+      td.addEventListener("click", () => {
+        if (td.querySelector("input")) return;  // already editing
+
+        const original = td.textContent;
+        td.textContent = "";
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = original;
+        input.className = "desc-edit-input";
+
+        const setBtn = document.createElement("button");
+        setBtn.textContent = "Set";
+        setBtn.className = "primary desc-edit-btn";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.className = "desc-edit-btn";
+
+        async function commit() {
+          const newDesc = input.value.trim();
+          const res = await fetch(`/api/aspects/${encodeURIComponent(aspectName)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ description: newDesc || null })
+          });
+          if (res.ok) {
+            td.textContent = newDesc;
+            makeDescriptionCellEditable(td, aspectName);
+          } else {
+            let msg = `${res.status} ${res.statusText}`;
+            try { const j = await res.json(); msg = j.error || msg; } catch {}
+            alert(msg);
+          }
+        }
+
+        function cancel() {
+          td.textContent = original;
+          makeDescriptionCellEditable(td, aspectName);
+        }
+
+        setBtn.addEventListener("click", commit);
+        cancelBtn.addEventListener("click", cancel);
+        input.addEventListener("keydown", e => {
+          if (e.key === "Enter")  { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        });
+
+        td.appendChild(input);
+        td.appendChild(setBtn);
+        td.appendChild(cancelBtn);
+        input.focus();
+        input.select();
+      });
     }
 
     // ── Add aspect ─────────────────────────────────────────────

@@ -104,3 +104,30 @@ select {
   color: #b00020;
   margin-top: 0.5rem;
 }
+
+/* --- Inline description editing --------------------------- */
+td.editable-desc {
+  cursor: pointer;
+}
+
+td.editable-desc:hover {
+  background: #f0f4ff;
+}
+
+td.editable-desc:empty::before {
+  content: "—";
+  color: #bbb;
+}
+
+.desc-edit-input {
+  width: 100%;
+  min-width: 8rem;
+  box-sizing: border-box;
+}
+
+.desc-edit-btn {
+  margin-left: 0.4rem;
+  font-size: 0.9rem;
+  padding: 0.25rem 0.55rem;
+  vertical-align: middle;
+}

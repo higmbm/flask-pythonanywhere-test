@@ -28,11 +28,11 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in rows %}
+    {% for row in rows %}
       <tr>
         <td>{{ row.name }}</td>
         <td>{{ row.dtype }}</td>
-        <td>{{ row.description }}</td>
+        <td class="editable-desc" data-aspect="{{ row.name }}" title="Click to edit description">{{ row.description }}</td>
         <td><a href="/aspects/{{ row.name }}/levels">View</a></td>
         <td>{{ row.vdiffs }}</td>
       </tr>
@@ -66,6 +66,72 @@
   <p id="addAspectError" class="error" hidden></p>
 
   <script>
+    // ── Inline description editing ───────────────────────────────
+    document.querySelectorAll("td.editable-desc").forEach(td => {
+      attachDescEdit(td, td.dataset.aspect);
+    });
+
+    function attachDescEdit(td, aspectName) {
+      td.addEventListener("click", handler);
+      function handler() {
+        if (td.querySelector("input")) return;
+
+        const original = td.textContent;
+        td.textContent = "";
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = original;
+        input.className = "desc-edit-input";
+
+        const setBtn = document.createElement("button");
+        setBtn.textContent = "Set";
+        setBtn.className = "primary desc-edit-btn";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.className = "desc-edit-btn";
+
+        async function commit() {
+          const newDesc = input.value.trim();
+          const res = await fetch(`/api/aspects/${encodeURIComponent(aspectName)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ description: newDesc || null })
+          });
+          if (res.ok) {
+            td.textContent = newDesc;
+            attachDescEdit(td, aspectName);
+          } else {
+            let msg = `${res.status} ${res.statusText}`;
+            try { const j = await res.json(); msg = j.error || msg; } catch {}
+            alert(msg);
+          }
+        }
+
+        function cancel() {
+          td.textContent = original;
+          attachDescEdit(td, aspectName);
+        }
+
+        setBtn.addEventListener("click", commit);
+        cancelBtn.addEventListener("click", cancel);
+        input.addEventListener("keydown", e => {
+          if (e.key === "Enter")  { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        });
+
+        td.appendChild(input);
+        td.appendChild(setBtn);
+        td.appendChild(cancelBtn);
+        input.focus();
+        input.select();
+      }
+    }
+  </script>
+
+  <script>
+    // ── Add aspect ───────────────────────────────────────────────
     const btnAdd   = document.getElementById("btnAddAspect");
     const btnClear = document.getElementById("btnClearAspectForm");
     const errEl    = document.getElementById("addAspectError");
