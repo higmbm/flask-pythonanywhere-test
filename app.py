@@ -1,9 +1,11 @@
+import logging
 import os
 from flask import Flask, session, request, jsonify, abort
 from flask import render_template
 from eudoxa import EudoxaManager
 
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------
 #  SESSION / CONFIG
@@ -15,11 +17,15 @@ app.secret_key = os.getenv("SECRET_KEY") or "dev-secret-change-me"
 #  HELPERS
 # -----------------------------------------------------------
 def load_manager_or_400():
-    """Load EudoxaManager from the session, or return 400 if no active project."""
+    """Load EudoxaManager from the session, or abort 400 if no active project."""
     serialized_mgr = session.get("manager")
     if not serialized_mgr:
         abort(400, description="No active project")
-    return EudoxaManager.from_dict(serialized_mgr)
+    try:
+        return EudoxaManager.from_dict(serialized_mgr)
+    except Exception:
+        logger.exception("Failed to deserialize EudoxaManager from session")
+        abort(400, description="Failed to load project data")
 
 
 def save_manager(mgr: EudoxaManager):
@@ -102,12 +108,8 @@ def delete_project():
 @app.get("/aspects")
 def aspects_html():
     """Render an HTML table of all aspects."""
-    try:
-        mgr = load_manager_or_400()
-    except:
-        mgr = None
-    
-    aspects = mgr.aspects if mgr else {}
+    mgr = load_manager_or_400()
+    aspects = mgr.aspects
 
     # Build rows for the HTML table
     table_rows = []
@@ -234,7 +236,7 @@ def levels_html(aspect_name):
     for level_name, level_obj in aspect.levels.items():
         rows.append({
             "level": level_name,
-            "description": getattr(level_obj, "description", "")
+            "description": "" if level_obj is None else str(level_obj)
         })
 
     return render_template(
@@ -287,13 +289,10 @@ def add_level(aspect_name):
 @app.get("/consequences")
 def consequences_html():
     """Render an HTML table of all consequences."""
-    try:
-        mgr = load_manager_or_400()
-    except:
-        mgr = None
+    mgr = load_manager_or_400()
 
-    aspects = list(mgr.aspects.values()) if mgr else []
-    consequences = mgr.consequences if mgr else {}
+    aspects = list(mgr.aspects.values())
+    consequences = mgr.consequences
 
     # Build column headers: one per aspect
     headers = [a.name for a in aspects]
