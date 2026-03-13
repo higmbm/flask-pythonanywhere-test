@@ -6,14 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/aspect_detail.css') }}">
+  <script src="{{ url_for('static', filename='common.js') }}"></script>
 </head>
 <body>
-
-  <p class="back-link"><a id="backLink" href="/aspects" data-aspect="{{ aspect_name }}">&larr; Back</a></p>
-  <script>
-    const ref = document.referrer;
-    if (ref) { document.getElementById("backLink").href = ref; }
-  </script>
 
   <!-- ── Aspect summary ──────────────────────────────────────── -->
   <dl class="aspect-summary">
@@ -65,10 +60,10 @@
     </tfoot>
   </table>
 
-  <p id="addLevelError" class="error" hidden></p>
+  <p id="addLevelError" class="error" hidden data-aspect="{{ aspect_name }}"></p>
 
   <script>
-    const ASPECT_NAME = document.getElementById("backLink").dataset.aspect;
+    const ASPECT_NAME = document.getElementById("addLevelError").dataset.aspect;
 
     // ── Inline description editing ───────────────────────────────
     const descTd = document.querySelector("dd.editable-desc");

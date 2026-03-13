@@ -33,6 +33,14 @@ def save_manager(mgr: EudoxaManager):
     session["manager"] = mgr.to_dict()
 
 
+@app.after_request
+def no_store_html(response):
+    """Prevent HTML pages from being served from bfcache on back-navigation."""
+    if response.content_type.startswith("text/html"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 # -----------------------------------------------------------
 #  UI
 # -----------------------------------------------------------
