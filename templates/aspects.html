@@ -104,7 +104,8 @@
           }
         }
 
-        function cancel() {
+        function cancel(e) {
+          if (e) e.stopPropagation();
           td.textContent = original;
           attachDescEdit(td, aspectName);
         }

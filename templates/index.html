@@ -325,7 +325,8 @@
           }
         }
 
-        function cancel() {
+        function cancel(e) {
+          if (e) e.stopPropagation();
           td.textContent = original;
           makeDescriptionCellEditable(td, aspectName);
         }
