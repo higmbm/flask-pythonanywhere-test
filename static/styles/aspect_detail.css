@@ -20,12 +20,12 @@
 .aspect-summary dd {
   margin: 0;
   align-self: baseline;
+  padding: 0.1rem 0.3rem;
 }
 
 .aspect-summary dd.editable-desc {
   cursor: pointer;
   border-radius: 4px;
-  padding: 0.1rem 0.3rem;
 }
 
 .aspect-summary dd.editable-desc:hover {
