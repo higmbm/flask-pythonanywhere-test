@@ -31,7 +31,12 @@
       <input id="inputProjectName" type="text" value="{{ project_name }}">
       <button id="btnRename">Rename (PUT)</button>
       <button id="btnDelete" class="danger">Delete (DELETE)</button>
+      <button id="btnImportProject">Import project</button>
+      <input id="fileImportProject" type="file" accept=".xlsx" hidden>
     </div>
+
+    <!-- Import banner (hidden until an import completes) -->
+    <div id="importBanner" class="flash-banner" hidden></div>
 
     <!-- ── Aspects ──────────────────────────────────────────── -->
     <section class="section">
@@ -210,6 +215,62 @@
       });
     }
 
+    // ── Import project ─────────────────────────────────────────
+    const btnImportProject  = document.getElementById("btnImportProject");
+    const fileImportProject = document.getElementById("fileImportProject");
+    const importBanner      = document.getElementById("importBanner");
+
+    function updateImportButton(hasAspects) {
+      if (!btnImportProject) return;
+      btnImportProject.disabled = hasAspects;
+      btnImportProject.title = hasAspects
+        ? "Import is only allowed when no aspects are defined."
+        : "";
+    }
+
+    if (btnImportProject) {
+      btnImportProject.addEventListener("click", () => {
+        if (!btnImportProject.disabled) fileImportProject.click();
+      });
+    }
+
+    if (fileImportProject) {
+      fileImportProject.addEventListener("change", async () => {
+        const file = fileImportProject.files[0];
+        if (!file) return;
+        fileImportProject.value = "";   // reset so same file can be picked again
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/project/import", {
+          method: "POST",
+          body: formData
+        });
+
+        const json = await res.json();
+        if (res.ok) {
+          const parts = json.imported.map(
+            a => `${a.name} (${a.level_count} level${a.level_count !== 1 ? "s" : ""})`
+          );
+          showImportBanner(`Imported ${json.imported.length} aspect${json.imported.length !== 1 ? "s" : ""}: ${parts.join(", ")}.`);
+          await loadAspects();
+          await loadConsequences();
+        } else {
+          showImportBanner(json.error || "Import failed.", true);
+        }
+      });
+    }
+
+    function showImportBanner(message, isError = false) {
+      if (!importBanner) return;
+      importBanner.textContent = message;
+      importBanner.className = "flash-banner" + (isError ? " flash-banner-error" : "");
+      importBanner.hidden = false;
+      clearTimeout(importBanner._hideTimer);
+      importBanner._hideTimer = setTimeout(() => { importBanner.hidden = true; }, 6000);
+    }
+
     const btnCreate = document.getElementById("btnCreate");
     if (btnCreate) {
       btnCreate.addEventListener("click", async () => {
@@ -280,6 +341,7 @@
       // Show/hide consequence section based on whether aspects exist
       const hasAspects = aspectData.length > 0;
       document.getElementById("consequencesSection").hidden = !hasAspects;
+      updateImportButton(hasAspects);
 
       // Rebuild consequences table header and add-row
       rebuildConsequenceTableStructure();

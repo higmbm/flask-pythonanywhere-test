@@ -247,3 +247,19 @@ dialog::backdrop {
   padding: 0 0.3rem;
   font-size: 0.85rem;
 }
+/* ── Flash banner ───────────────────────────────────────────── */
+.flash-banner {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 6px;
+  background: #d4edda;
+  border: 1px solid #7cb97c;
+  color: #1a4d2a;
+  font-size: 0.95rem;
+}
+
+.flash-banner.flash-banner-error {
+  background: #fde8e8;
+  border-color: #e07070;
+  color: #7a1a1a;
+}

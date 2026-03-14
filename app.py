@@ -1,5 +1,6 @@
 import logging
 import os
+import openpyxl
 from flask import Flask, session, request, jsonify, abort
 from flask import render_template
 from eudoxa import EudoxaManager
@@ -110,9 +111,47 @@ def delete_project():
     return "", 204
 
 
-# -----------------------------------------------------------
-#  REST: ASPECTS
-# -----------------------------------------------------------
+@app.post("/api/project/import")
+def import_project():
+    mgr = load_manager_or_400()
+
+    if mgr.aspects:
+        return {"error": "Import is only allowed when no aspects are defined."}, 409
+
+    f = request.files.get("file")
+    if not f:
+        return {"error": "No file uploaded."}, 400
+
+    try:
+        wb = openpyxl.load_workbook(f.stream, data_only=True)
+    except Exception:
+        logger.exception("Failed to open uploaded workbook")
+        return {"error": "Could not read the uploaded file. Is it a valid Excel file?"}, 400
+
+    prefix = "|ASP| "
+    aspect_sheets = [name for name in wb.sheetnames if name.startswith(prefix)]
+
+    if not aspect_sheets:
+        return {"error": "No aspect worksheets ('|ASP| …') found in the file."}, 400
+
+    imported = []
+    try:
+        for sheet_name in aspect_sheets:
+            ws = wb[sheet_name]
+            rows = mgr.import_aspect_from_worksheet(ws)
+            # rows[0] = ["Aspect:", name], rows[1] = ["Type:", ...], rows[2] = ["Description:", ...]
+            # rows[3:] = [level, description] pairs
+            aspect_name = rows[0][1]
+            level_count = len(rows) - 3
+            imported.append({"name": aspect_name, "level_count": level_count})
+    except Exception:
+        logger.exception("Failed to import aspects from workbook")
+        return {"error": "An error occurred while importing aspects."}, 500
+
+    save_manager(mgr)
+    return {"imported": imported}, 200
+
+
 @app.get("/aspects")
 def aspects_html():
     """Render an HTML table of all aspects."""
