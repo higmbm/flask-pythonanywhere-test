@@ -143,7 +143,11 @@ def import_project():
             # rows[3:] = [level, description] pairs
             aspect_name = rows[0][1]
             level_count = len(rows) - 3
-            imported.append({"name": aspect_name, "level_count": level_count})
+            # Import level relations if present (column 5, row 2 is the first relation column header)
+            has_relations = ws.cell(row=2, column=5).value is not None
+            if has_relations:
+                mgr.import_aspect_level_relations_from_worksheet(ws)
+            imported.append({"name": aspect_name, "level_count": level_count, "has_relations": has_relations})
     except Exception:
         logger.exception("Failed to import aspects from workbook")
         return {"error": "An error occurred while importing aspects."}, 500

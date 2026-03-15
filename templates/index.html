@@ -251,7 +251,7 @@
         const json = await res.json();
         if (res.ok) {
           const parts = json.imported.map(
-            a => `${a.name} (${a.level_count} level${a.level_count !== 1 ? "s" : ""})`
+            a => `${a.name} (${a.level_count} level${a.level_count !== 1 ? "s" : ""}${a.has_relations ? ", relations" : ""})`
           );
           showImportBanner(`Imported ${json.imported.length} aspect${json.imported.length !== 1 ? "s" : ""}: ${parts.join(", ")}.`);
           await loadAspects();
