@@ -29,14 +29,9 @@
     <div id="managePanel" class="action-panel" hidden>
       <label for="inputProjectName">New name:</label>
       <input id="inputProjectName" type="text" value="{{ project_name }}">
-      <button id="btnRename">Rename (PUT)</button>
-      <button id="btnDelete" class="danger">Delete (DELETE)</button>
-      <button id="btnImportProject">Import project</button>
-      <input id="fileImportProject" type="file" accept=".xlsx" hidden>
+      <button id="btnRename">Rename</button>
+      <button id="btnDelete" class="danger">Delete</button>
     </div>
-
-    <!-- Import banner (hidden until an import completes) -->
-    <div id="importBanner" class="flash-banner" hidden></div>
 
     <!-- ── Aspects ──────────────────────────────────────────── -->
     <section class="section">
@@ -149,12 +144,17 @@
 
   {% else %}
 
-    <!-- ── No project: create form ──────────────────────────── -->
+    <!-- ── No project: create / import form ─────────────────── -->
     <div class="action-panel">
       <label for="inputProjectName">Project name:</label>
       <input id="inputProjectName" type="text" placeholder="Enter project name">
-      <button id="btnCreate" class="primary">Create (POST)</button>
+      <button id="btnCreate" class="primary">Create empty project</button>
+      <button id="btnImportProject">Import project from Excel</button>
+      <input id="fileImportProject" type="file" accept=".xlsx" hidden>
     </div>
+
+    <!-- Import banner (hidden until an import completes) -->
+    <div id="importBanner" class="flash-banner" hidden></div>
 
   {% endif %}
 
@@ -220,17 +220,11 @@
     const fileImportProject = document.getElementById("fileImportProject");
     const importBanner      = document.getElementById("importBanner");
 
-    function updateImportButton(hasAspects) {
-      if (!btnImportProject) return;
-      btnImportProject.disabled = hasAspects;
-      btnImportProject.title = hasAspects
-        ? "Import is only allowed when no aspects are defined."
-        : "";
-    }
-
     if (btnImportProject) {
       btnImportProject.addEventListener("click", () => {
-        if (!btnImportProject.disabled) fileImportProject.click();
+        const name = document.getElementById("inputProjectName").value.trim();
+        if (!name) { alert("Project name must be non-empty."); return; }
+        fileImportProject.click();
       });
     }
 
@@ -240,23 +234,40 @@
         if (!file) return;
         fileImportProject.value = "";   // reset so same file can be picked again
 
+        const name = document.getElementById("inputProjectName").value.trim();
+        if (!name) { alert("Project name must be non-empty."); return; }
+
+        // Step 1: create the project
+        const createRes = await fetch("/api/project", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_name: name })
+        });
+        if (!createRes.ok) {
+          let msg = `${createRes.status} ${createRes.statusText}`;
+          try { const j = await createRes.json(); msg = j.error || msg; } catch {}
+          alert(msg);
+          return;
+        }
+
+        // Step 2: import the file
         const formData = new FormData();
         formData.append("file", file);
-
-        const res = await fetch("/api/project/import", {
+        const importRes = await fetch("/api/project/import", {
           method: "POST",
           body: formData
         });
-
-        const json = await res.json();
-        if (res.ok) {
+        const json = await importRes.json();
+        if (importRes.ok) {
           const parts = json.imported.map(
             a => `${a.name} (${a.level_count} level${a.level_count !== 1 ? "s" : ""}${a.has_relations ? ", relations" : ""})`
           );
-          showImportBanner(`Imported ${json.imported.length} aspect${json.imported.length !== 1 ? "s" : ""}: ${parts.join(", ")}.`);
-          await loadAspects();
-          await loadConsequences();
+          const msg = `Imported ${json.imported.length} aspect${json.imported.length !== 1 ? "s" : ""}: ${parts.join(", ")}.`;
+          sessionStorage.setItem("importBannerMsg", msg);
+          location.reload();
         } else {
+          // Import failed — delete the just-created project to avoid a broken state
+          await fetch("/api/project", { method: "DELETE" });
           showImportBanner(json.error || "Import failed.", true);
         }
       });
@@ -269,6 +280,13 @@
       importBanner.hidden = false;
       clearTimeout(importBanner._hideTimer);
       importBanner._hideTimer = setTimeout(() => { importBanner.hidden = true; }, 6000);
+    }
+
+    // Show banner carried over from before a reload
+    const pendingBanner = sessionStorage.getItem("importBannerMsg");
+    if (pendingBanner) {
+      sessionStorage.removeItem("importBannerMsg");
+      showImportBanner(pendingBanner);
     }
 
     const btnCreate = document.getElementById("btnCreate");
@@ -341,7 +359,6 @@
       // Show/hide consequence section based on whether aspects exist
       const hasAspects = aspectData.length > 0;
       document.getElementById("consequencesSection").hidden = !hasAspects;
-      updateImportButton(hasAspects);
 
       // Rebuild consequences table header and add-row
       rebuildConsequenceTableStructure();
