@@ -326,7 +326,6 @@ class EudoxaManager:
     def __init__(self):
         logger.info('Initializing EudoxaManager')
         self.aspects: Dict[str, Aspect] = {}
-        self.consequence_space: List[Consequence] = [Consequence()]
         self.consequences : Dict[str, Consequence]  = {}
         self.vdiff_comparison_matrix: Dict[Tuple[str, str], Dict[Tuple[Tuple[str, str], Tuple[str, str]], str]] = {}
 
@@ -343,11 +342,6 @@ class EudoxaManager:
             self.vdiff_comparison_matrix[(name, a_name)] = {}
         data_type = str_to_type(data_type_str)
         self.aspects[name] = Aspect(name, data_type, description)
-        # Add a None entry for this aspect in every existing consequence
-        for consequence in self.consequence_space:
-            consequence.__setitem__(name, None)
-        for (_, consequence) in self.consequences.items():
-            consequence.__setitem__(name, None)
         return self.aspects[name]
 
     def get_aspect(self, name: str) -> Aspect:
@@ -526,8 +520,6 @@ class EudoxaManager:
         aspect.add_level(level_str, description)
         # Update the value-difference comparison matrix
         self.expand_vdiff_comparison_matrix(aspect_name)
-        # Update the consequence space
-        self.expand_consequence_space(aspect_name, level_str, description)
 
     def set_aspect_level_relation(self, aspect: str, la, lb, rel: str) -> Tuple:
         adds, colls = [], []
@@ -775,27 +767,25 @@ class EudoxaManager:
                         logger.debug(f"Initialising ({d2[0]},{d2[1]})?({d1[0]},{d1[1]}): {rel}")
                         vdcm21[(d2, d1)] = rel
     
-    def expand_consequence_space(self, aspect_name: str, level_str: str, description: str):
-        aspect = self.get_aspect(aspect_name)
-        # If this is the only level for the aspect, assign it to all existing consequences
-        if len(aspect.levels) == 1:
-            for consequence in self.consequence_space:
-                consequence.__setitem__(aspect_name, level_str)
-        else:
-            # Collect levels from all other aspects
-            other_aspects = [a for a in self.aspects.values() if a.name != aspect_name]
-            other_levels = []
-            for a in other_aspects:
-                if not a.levels:
-                    other_levels.append([(a.name, None)])
-                else:
-                    other_levels.append([(a.name, level) for level in a.levels.keys()])
-            # Create new consequences for each combination
-            for combo in product(*other_levels):
-                aspect_levels = {name: lvl for name, lvl in combo}
-                aspect_levels[aspect_name] = level_str
-                c = Consequence(aspect_levels)
-                self.consequence_space.append(c)
+    def compute_consequence_space(self) -> List:
+        """Derive the full consequence space from aspects and their levels.
+        This is always computable from first principles and need not be persisted."""
+        aspects = list(self.aspects.values())
+        if not aspects:
+            return [Consequence()]
+        level_lists = [list(a.levels.keys()) for a in aspects]
+        if any(len(ll) == 0 for ll in level_lists):
+            return [Consequence()]
+        result = []
+        for combo in product(*level_lists):
+            c = Consequence({a.name: level for a, level in zip(aspects, combo)})
+            result.append(c)
+        return result
+
+    @property
+    def consequence_space(self) -> List:
+        """Computed on demand from aspects and levels — never persisted."""
+        return self.compute_consequence_space()
 
     def export_aspect_to_excel(self, aspect_name: str, filename: str) -> int:
         import openpyxl
@@ -1080,9 +1070,6 @@ class EudoxaManager:
                 short: c.to_dict()
                 for short, c in self.consequences.items()
             },
-            "consequence_space": [
-                c.to_dict() for c in self.consequence_space
-            ],
             "vdiff_comparison_matrix": vdcm_out
         }
 
@@ -1093,7 +1080,6 @@ class EudoxaManager:
         # Clear auto-generated initial values
         mgr.aspects = {}
         mgr.consequences = {}
-        mgr.consequence_space = []
         mgr.vdiff_comparison_matrix = {}
     
         # ---- Aspects ----
@@ -1104,10 +1090,6 @@ class EudoxaManager:
         for short, cons_data in data.get("consequences", {}).items():
             mgr.consequences[short] = Consequence.from_dict(cons_data)
     
-        # ---- Consequence space ----
-        cs_list = data.get("consequence_space", [])
-        for cdata in cs_list:
-            mgr.consequence_space.append(Consequence.from_dict(cdata))
     
         # ---- VDiff comparison matrix ----
         vdcm_in = data.get("vdiff_comparison_matrix", {})
