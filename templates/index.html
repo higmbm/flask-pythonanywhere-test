@@ -33,6 +33,9 @@
       <button id="btnDelete" class="danger">Delete</button>
     </div>
 
+    <!-- Import result panel (shown after import, above Aspects) -->
+    <div id="importResult" class="import-result" hidden></div>
+
     <!-- ── Aspects ──────────────────────────────────────────── -->
     <section class="section">
       <div class="section-header">
@@ -153,8 +156,8 @@
       <input id="fileImportProject" type="file" accept=".xlsx" hidden>
     </div>
 
-    <!-- Import banner (hidden until an import completes) -->
-    <div id="importBanner" class="flash-banner" hidden></div>
+    <!-- Import result panel (shown here on import failure) -->
+    <div id="importResult" class="import-result" hidden></div>
 
   {% endif %}
 
@@ -218,7 +221,7 @@
     // ── Import project ─────────────────────────────────────────
     const btnImportProject  = document.getElementById("btnImportProject");
     const fileImportProject = document.getElementById("fileImportProject");
-    const importBanner      = document.getElementById("importBanner");
+    const importResultEl    = document.getElementById("importResult");
 
     if (btnImportProject) {
       btnImportProject.addEventListener("click", () => {
@@ -232,7 +235,7 @@
       fileImportProject.addEventListener("change", async () => {
         const file = fileImportProject.files[0];
         if (!file) return;
-        fileImportProject.value = "";   // reset so same file can be picked again
+        fileImportProject.value = "";
 
         const name = document.getElementById("inputProjectName").value.trim();
         if (!name) { alert("Project name must be non-empty."); return; }
@@ -246,7 +249,7 @@
         if (!createRes.ok) {
           let msg = `${createRes.status} ${createRes.statusText}`;
           try { const j = await createRes.json(); msg = j.error || msg; } catch {}
-          alert(msg);
+          showImportResult({ error: msg });
           return;
         }
 
@@ -257,36 +260,87 @@
           method: "POST",
           body: formData
         });
-        const json = await importRes.json();
+        const json = await importRes.json().catch(() => ({}));
+        const result = json.import_result || {};
+
         if (importRes.ok) {
-          const parts = json.imported.map(
-            a => `${a.name} (${a.level_count} level${a.level_count !== 1 ? "s" : ""}${a.has_relations ? ", relations" : ""})`
-          );
-          const msg = `Imported ${json.imported.length} aspect${json.imported.length !== 1 ? "s" : ""}: ${parts.join(", ")}.`;
-          sessionStorage.setItem("importBannerMsg", msg);
+          // Carry result across the reload via sessionStorage
+          sessionStorage.setItem("importResult", JSON.stringify(result));
           location.reload();
         } else {
-          // Import failed — delete the just-created project to avoid a broken state
+          // Import failed — delete the just-created project
           await fetch("/api/project", { method: "DELETE" });
-          showImportBanner(json.error || "Import failed.", true);
+          showImportResult(result.success === undefined ? { error: json.error || "Import failed." } : result);
         }
       });
     }
 
-    function showImportBanner(message, isError = false) {
-      if (!importBanner) return;
-      importBanner.textContent = message;
-      importBanner.className = "flash-banner" + (isError ? " flash-banner-error" : "");
-      importBanner.hidden = false;
-      clearTimeout(importBanner._hideTimer);
-      importBanner._hideTimer = setTimeout(() => { importBanner.hidden = true; }, 6000);
+    function fmtAspect(a) {
+      const rel = a.has_relations ? ", with relations" : "";
+      return `${a.name} (${a.level_count} level${a.level_count !== 1 ? "s" : ""}${rel})`;
     }
 
-    // Show banner carried over from before a reload
-    const pendingBanner = sessionStorage.getItem("importBannerMsg");
-    if (pendingBanner) {
-      sessionStorage.removeItem("importBannerMsg");
-      showImportBanner(pendingBanner);
+    function showImportResult(result) {
+      if (!importResultEl) return;
+      let html = "";
+
+      // Hard error (e.g. project creation failed)
+      if (result.error) {
+        importResultEl.className = "import-result import-result-error";
+        importResultEl.innerHTML = `<strong>Error:</strong> ${result.error}`;
+        importResultEl.hidden = false;
+        return;
+      }
+
+      const success = result.success;
+      importResultEl.className = "import-result" + (success ? "" : " import-result-error");
+
+      // Aspects imported
+      if (result.imported_aspects && result.imported_aspects.length > 0) {
+        html += `<p><strong>Aspects imported (${result.imported_aspects.length}):</strong> `
+          + result.imported_aspects.map(fmtAspect).join(", ") + "</p>";
+      }
+
+      // Per-aspect errors
+      if (result.aspect_errors && Object.keys(result.aspect_errors).length > 0) {
+        html += "<p><strong>Aspect errors (import cancelled):</strong></p><ul>";
+        for (const [asp, errs] of Object.entries(result.aspect_errors)) {
+          errs.forEach(e => { html += `<li><em>${asp}:</em> ${e}</li>`; });
+        }
+        html += "</ul>";
+      }
+
+      // Closure collisions
+      if (result.closure_collisions && result.closure_collisions.length > 0) {
+        html += "<p><strong>Closure collisions (import cancelled):</strong></p><ul>";
+        result.closure_collisions.forEach(c => { html += `<li>${c}</li>`; });
+        html += "</ul>";
+      }
+
+      // Consequences
+      if (result.imported_consequences && result.imported_consequences.length > 0) {
+        html += `<p><strong>Consequences imported (${result.imported_consequences.length}):</strong> `
+          + result.imported_consequences.join(", ") + "</p>";
+      }
+      if (result.missing_cons_sheet) {
+        html += "<p>No consequences sheet found in file.</p>";
+      }
+      if (result.consequence_errors && result.consequence_errors.length > 0) {
+        html += "<p><strong>Consequence errors (import cancelled):</strong></p><ul>";
+        result.consequence_errors.forEach(e => { html += `<li>${e}</li>`; });
+        html += "</ul>";
+      }
+
+      if (!html) html = success ? "<p>Import complete.</p>" : "<p>Import failed.</p>";
+      importResultEl.innerHTML = html;
+      importResultEl.hidden = false;
+    }
+
+    // Show result carried over from before a reload
+    const pendingResult = sessionStorage.getItem("importResult");
+    if (pendingResult) {
+      sessionStorage.removeItem("importResult");
+      showImportResult(JSON.parse(pendingResult));
     }
 
     const btnCreate = document.getElementById("btnCreate");

@@ -129,32 +129,20 @@ def import_project():
         logger.exception("Failed to open uploaded workbook")
         return {"error": "Could not read the uploaded file. Is it a valid Excel file?"}, 400
 
-    prefix = "|ASP| "
-    aspect_sheets = [name for name in wb.sheetnames if name.startswith(prefix)]
-
-    if not aspect_sheets:
+    if not any(name.startswith(eudoxa.ASP) for name in wb.sheetnames):
         return {"error": "No aspect worksheets found in the file."}, 400
 
-    imported = []
     try:
-        for sheet_name in aspect_sheets:
-            ws = wb[sheet_name]
-            rows = mgr.import_aspect_from_worksheet(ws)
-            # rows[0] = ["Aspect:", name], rows[1] = ["Type:", ...], rows[2] = ["Description:", ...]
-            # rows[3:] = [level, description] pairs
-            aspect_name = rows[0][1]
-            level_count = len(rows) - 3
-            # Import level relations if present (column 5, row 2 is the first relation column header)
-            has_relations = ws.cell(row=2, column=5).value is not None
-            if has_relations:
-                mgr.import_aspect_level_relations_from_worksheet(ws)
-            imported.append({"name": aspect_name, "level_count": level_count, "has_relations": has_relations})
+        result = mgr.validate_and_import_workbook(wb)
     except Exception:
-        logger.exception("Failed to import aspects from workbook")
-        return {"error": "An error occurred while importing aspects."}, 500
+        logger.exception("Unexpected error during import")
+        return {"error": "An unexpected error occurred during import."}, 500
+
+    if not result["success"]:
+        return {"import_result": result}, 422
 
     save_manager(mgr)
-    return {"imported": imported}, 200
+    return {"import_result": result}, 200
 
 
 @app.get("/aspects")

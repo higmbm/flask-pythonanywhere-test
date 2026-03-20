@@ -263,3 +263,34 @@ dialog::backdrop {
   border-color: #e07070;
   color: #7a1a1a;
 }
+
+/* ── Import result panel ────────────────────────────────── */
+.import-result {
+  margin-top: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-radius: 6px;
+  background: #d4edda;
+  border: 1px solid #7cb97c;
+  color: #1a4d2a;
+  font-size: 0.9rem;
+}
+
+.import-result.import-result-error {
+  background: #fde8e8;
+  border-color: #e07070;
+  color: #7a1a1a;
+}
+
+.import-result p {
+  margin: 0.2rem 0;
+}
+
+.import-result ul {
+  margin: 0.2rem 0 0.4rem 0;
+  padding-left: 1.4rem;
+}
+
+.import-result li {
+  font-family: monospace;
+  font-size: 0.85rem;
+}

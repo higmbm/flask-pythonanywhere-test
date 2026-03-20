@@ -1063,6 +1063,139 @@ class EudoxaManager:
         ws = wb[CONS]
         self.import_consequences_from_worksheet(ws)
 
+    def validate_and_import_workbook(self, wb, base_mgr=None) -> dict:
+        """Staged validate-then-commit import from an openpyxl workbook.
+
+        Pipeline:
+          1. Per-aspect: add aspect, levels, and relations to a temporary
+             manager. Collect all per-aspect errors; cancel if any.
+          2. Compute closure on the temporary manager. Cancel on collision.
+          3. Import named consequences (3a strict). Cancel on any error.
+          4. On full success, commit by copying temporary state into self.
+
+        base_mgr: optional EudoxaManager to use as the starting state of the
+                  temporary manager (for single-aspect import into an existing
+                  project). Defaults to a fresh empty manager.
+        """
+        result = {
+            "success":              False,
+            "imported_aspects":     [],
+            "aspect_errors":        {},
+            "closure_collisions":   [],
+            "imported_consequences": [],
+            "consequence_errors":   [],
+            "missing_cons_sheet":   False,
+        }
+
+        # Initialise the temporary manager
+        if base_mgr is not None:
+            tmp = EudoxaManager.from_dict(base_mgr.to_dict())
+        else:
+            tmp = EudoxaManager()
+
+        # ── Step 1: aspects, levels, and relations ─────────────────
+        prefix = ASP  # '|ASP| '
+        aspect_sheets = [name for name in wb.sheetnames if name.startswith(prefix)]
+
+        for sheet_name in aspect_sheets:
+            ws = wb[sheet_name]
+            aspect_name = ws["A1"].value
+            errors = []
+
+            # Add aspect and levels (stops on first error per aspect)
+            try:
+                tmp.import_aspect_from_worksheet(ws)
+            except ValueError as e:
+                errors.append(str(e))
+                result["aspect_errors"][aspect_name] = errors
+                continue
+
+            # Add relations if present
+            has_relations = ws.cell(row=2, column=5).value is not None
+            if has_relations:
+                adds, colls = tmp.import_aspect_level_relations_from_worksheet(ws)
+                if colls:
+                    for coll_entry in colls:
+                        _, _, coll = coll_entry
+                        vd1, old_rel, vd2, new_rel = coll
+                        errors.append(
+                            f"Collision: attempted {repr(vd1)} {new_rel} {repr(vd2)} "
+                            f"conflicts with existing {repr(vd1)} {old_rel} {repr(vd2)}"
+                        )
+                    result["aspect_errors"][aspect_name] = errors
+                    continue
+
+            result["imported_aspects"].append({
+                "name":          aspect_name,
+                "level_count":   len(tmp.aspects[aspect_name].levels),
+                "has_relations": has_relations,
+            })
+
+        if result["aspect_errors"]:
+            return result
+
+        # ── Step 2: closure check ───────────────────────────────────
+        _, _, closure_colls = tmp.closure()
+        if closure_colls:
+            for coll_entry in closure_colls:
+                origin_type, origin_detail, coll = coll_entry
+                vd1, old_rel, vd2, new_rel = coll
+                result["closure_collisions"].append(
+                    f"Closure collision: "
+                    f"attempted {repr(vd1)} {new_rel} {repr(vd2)} "
+                    f"conflicts with existing {repr(vd1)} {old_rel} {repr(vd2)}"
+                )
+            return result
+
+        # ── Step 3: consequences (strict 3a) ────────────────────────
+        cons_sheet_name = next((n for n in wb.sheetnames if n == CONS), None)
+        if cons_sheet_name is None:
+            result["missing_cons_sheet"] = True
+        else:
+            ws_cons = wb[cons_sheet_name]
+            # Read aspect names from header row
+            aspect_names = []
+            for col_index in range(2, ws_cons.max_column + 1):
+                a_name = ws_cons.cell(row=1, column=col_index).value
+                if not a_name:
+                    break
+                aspect_names.append(a_name)
+            # Validate and stage consequences
+            for row in ws_cons.iter_rows(min_row=3, values_only=True):
+                short_name = row[0]
+                if not short_name:
+                    break
+                aspect_levels = {
+                    a: str(row[i + 1])
+                    for i, a in enumerate(aspect_names)
+                }
+                # 3a strict: check all levels exist before adding
+                unknown = []
+                for a_name, level in aspect_levels.items():
+                    if not tmp.has_aspect(a_name):
+                        unknown.append(f"unknown aspect '{a_name}'")
+                    elif level not in tmp.aspects[a_name].levels:
+                        unknown.append(f"unknown level '{level}' for aspect '{a_name}'")
+                if unknown:
+                    result["consequence_errors"].append(
+                        f"'{short_name}': " + ", ".join(unknown)
+                    )
+                else:
+                    try:
+                        tmp.add_consequence(short_name, aspect_levels)
+                        result["imported_consequences"].append(short_name)
+                    except ValueError as e:
+                        result["consequence_errors"].append(f"'{short_name}': {e}")
+            if result["consequence_errors"]:
+                return result
+
+        # ── Step 4: commit ──────────────────────────────────────────
+        self.aspects                 = tmp.aspects
+        self.consequences            = tmp.consequences
+        self.vdiff_comparison_matrix = tmp.vdiff_comparison_matrix
+        result["success"] = True
+        return result
+
     def import_aspect_from_worksheet(self, ws) -> List:
         aspect_name = ws["A1"].value
         data_type_str = ws["B1"].value
