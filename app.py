@@ -367,20 +367,44 @@ def patch_relation(aspect_name, la, lb):
     if rel not in eudoxa.AL_RELATION_OPTIONS:
         return {"error": f"Invalid relation '{rel}'"}, 400
 
+    def fmt_tokens(items):
+        """Render a mixed list of VDiffs and relation strings as a single string."""
+        return " ".join(repr(x) if hasattr(x, 'aspect_name') else str(x) for x in items)
+
+    RULE_LABELS = {
+        'DiffP':      'Difference property',        'NegDiffP':   'Negative difference property',        'TransP':     'Transitivity property',        'InvP':       'Inverse difference property',        'TransP2':    'Transitivity property 2',        'NegTransP':  'Negative transitivity property',        'NegTransP2': 'Negative transitivity property 2',        'NegInvP':    'Negative inverse difference property',    }
+
+    def fmt_origin(origin_type, origin_detail):
+        """Translate an inference rule origin to natural language where known,
+        falling back to the raw symbolic form for unrecognised patterns."""
+        if origin_type == 'SETREL':
+            # ['SETREL', [aspect, la, rel, lb]]
+            aspect, la, rel, lb = origin_detail
+            rel_label = rel if rel else '\u2014'
+            return f"Set '{la} {rel_label} {lb}' in {aspect}"
+        label = RULE_LABELS.get(origin_type)
+        if label:
+            return f"{label}: {fmt_tokens(origin_detail)}"
+        # Fallback: raw symbolic form
+        return f"{origin_type}({fmt_tokens(origin_detail)})"
+
+    def fmt_result(add):
+        """Render the result of an inference step as a symbolic vdiff relation."""
+        return fmt_tokens(add)
+
     def fmt_add(entry):
         origin_type, origin_detail, add = entry
-        if len(add) == 3:
-            vd1, new_rel, vd2 = add
-            return f"{repr(vd1)} {new_rel} {repr(vd2)}"
-        else:
-            an1, d1, an2, d2, new_rel = add
-            rel_label = new_rel if new_rel else "\u2014"
-            return f"\u0394{d1} {rel_label} \u0394{d2} (unset)"
+        return f"{fmt_origin(origin_type, origin_detail)} \u2192 {fmt_result(add)}"
 
     def fmt_coll(entry):
         origin_type, origin_detail, coll = entry
-        vd1, old_rel, vd2, new_rel = coll
-        return f"{repr(vd1)} {new_rel} {repr(vd2)} collides with {repr(vd1)} {old_rel} {repr(vd2)}"
+        # coll alternates: vd1, existing_rel, vd2, attempted_rel
+        vd1, existing_rel, vd2, attempted_rel = coll
+        return (
+            f"{fmt_origin(origin_type, origin_detail)} \u2192 "
+            f"attempted {repr(vd1)} {attempted_rel} {repr(vd2)} "
+            f"conflicts with existing {repr(vd1)} {existing_rel} {repr(vd2)}"
+        )
 
     try:
         adds, colls, inferred_adds = mgr.try_set_aspect_level_relation(aspect_name, la, lb, rel)

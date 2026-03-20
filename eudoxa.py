@@ -536,7 +536,7 @@ class EudoxaManager:
         vd_ab = VDiff(aspect, la_str, lb_str)
         vd_ba = VDiff(aspect, lb_str, la_str)
 
-        origin = ['SETAL', [aspect, la_str, rel, lb_str]]
+        origin = ['SETREL', [aspect, la_str, rel, lb_str]]
         if rel == UNDEFINED:
             app_ac(origin, self.set_vdiff_relation(vd_ab, zero, UNDEFINED), adds, colls)
             app_ac(origin, self.set_vdiff_relation(vd_ba, zero, UNDEFINED), adds, colls)
@@ -595,7 +595,7 @@ class EudoxaManager:
         zero  = VDiff(aspect, None, None)
         vd_ab = VDiff(aspect, la_str, lb_str)
         vd_ba = VDiff(aspect, lb_str, la_str)
-        origin = ['SETAL', [aspect, la_str, rel, lb_str]]
+        origin = ['SETREL', [aspect, la_str, rel, lb_str]]
         staged_adds, staged_colls = [], []
         if rel == UNDEFINED:
             app_ac(origin, set_vdiff_relation(staged, vd_ab, zero, UNDEFINED), staged_adds, staged_colls)
@@ -826,7 +826,7 @@ class EudoxaManager:
                                     origin = ['NegTransP2', [ab, FALSE, cd, DEQ, ef]]
                                     app_ac(origin, set_vdiff_relation(closure, ab, ef, FALSE), adds, colls)
                             elif rel_cd_ef == FALSE: # abScd & cdSef
-                                origin = ['NegTransP', ab, rel_ab_cd, cd, rel_cd_ef, ef]
+                                origin = ['NegTransP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
                                 app_ac(origin, set_vdiff_relation(closure, ab, ef, FALSE), adds, colls)
                                 if ab.natural_zero(): # xxScd & cdRef ==> feRdc
                                     dc = cd.inv()
