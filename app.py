@@ -386,10 +386,18 @@ def patch_relation(aspect_name, la, lb):
 
     def fmt_tokens(items):
         """Render a mixed list of VDiffs and relation strings as a single string."""
-        return " ".join(repr(x) if hasattr(x, 'aspect_name') else str(x) for x in items)
+        return " ".join(repr(x) if hasattr(x, 'aspect_name') else (str(x) if x else '—') for x in items)
 
     RULE_LABELS = {
-        'DiffP':      'Difference property',        'NegDiffP':   'Negative difference property',        'TransP':     'Transitivity property',        'InvP':       'Inverse difference property',        'TransP2':    'Transitivity property 2',        'NegTransP':  'Negative transitivity property',        'NegTransP2': 'Negative transitivity property 2',        'NegInvP':    'Negative inverse difference property',    }
+        'DiffP':      'Difference property',
+        'NegDiffP':   'Negative difference property',
+        'TransP':     'Transitivity property',
+        'InvP':       'Inverse difference property',
+        'TransP2':    'Transitivity property 2',
+        'NegTransP':  'Negative transitivity property',
+        'NegTransP2': 'Negative transitivity property 2',
+        'NegInvP':    'Negative inverse difference property',
+    }
 
     def fmt_origin(origin_type, origin_detail):
         """Translate an inference rule origin to natural language where known,

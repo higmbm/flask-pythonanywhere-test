@@ -239,7 +239,7 @@ def set_vdiff_relation(vdcm, vd1: VDiff, vd2: VDiff, new_rel: str) -> Tuple:
     if new_rel == old_rel:      # Same relation — no change
         pass
     elif new_rel == UNDEFINED:  # Unset (clear) relation
-        add = [an1, d1, an2, d2, new_rel]
+        add = [vd1, new_rel, vd2]
         vdc12[(d1, d2)] = new_rel
     elif old_rel == UNDEFINED:  # Set new relation
         add = [vd1, new_rel, vd2]
