@@ -5,6 +5,7 @@
   <title>Consequences</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/consequences.css') }}">
   <script src="{{ url_for('static', filename='common.js') }}"></script>
 </head>
@@ -12,26 +13,330 @@
 
   <h1>Consequences</h1>
 
-  <table class="data-table consequences-table">
-    <thead>
-      <tr>
-        <th>Short name</th>
-        {% for header in headers %}
-        <th><a href="/aspects/{{ header }}/levels">{{ header }}</a></th>
-        {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-      <tr>
-        <td>{{ row.short_name }}</td>
-        {% for level in row.levels %}
-        <td>{{ level }}</td>
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <section class="section" id="consequencesSection">
+    <div class="section-header">
+      <h2>Named consequences</h2>
+      <button id="btnShowConsequenceSpace">Show consequence space</button>
+    </div>
+    <table class="data-table consequences-table" id="consequencesTable">
+      <thead>
+        <tr id="consequencesHeaders"></tr>
+      </thead>
+      <tbody id="consequencesBody">
+        <tr><td class="muted">Loading...</td></tr>
+      </tbody>
+      <tfoot class="add-consequence-foot">
+        <tr class="add-consequence-inputs"></tr>
+        <tr class="add-consequence-action">
+          <td id="addConsequenceActionCell" colspan="1">
+            <div class="consequence-action-row">
+              <span class="action-spacer"></span>
+              <button id="btnAddConsequence" class="primary">Add consequence</button>
+              <button id="btnClearForm">Clear</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="add-consequence-notice" hidden>
+          <td id="addConsequenceNoticeCell" colspan="1">
+            <p id="newLevelsNotice" class="new-levels-notice"></p>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <!-- ── Consequence space dialog ─────────────────────────── -->
+  <dialog id="consequenceSpaceDialog">
+    <div class="dialog-header">
+      <h2>Consequence space</h2>
+      <button id="btnCloseDialog" class="secondary">Close</button>
+    </div>
+    <p class="hint">
+      Highlighted rows already have a name in the named consequences set.
+      Click any row to pre-fill the add-consequence form.
+    </p>
+    <div class="dialog-table-wrapper">
+      <table class="data-table" id="consequenceSpaceTable">
+        <thead><tr id="consequenceSpaceHeaders"></tr></thead>
+        <tbody id="consequenceSpaceBody"></tbody>
+      </table>
+    </div>
+  </dialog>
+
+  <script>
+    const NEW_LEVEL_SENTINEL = "__new__";
+    let aspectData = [];  // [{name, levels}, ...]
+
+    // ── Load aspects (needed to build add-consequence form) ────
+    async function loadAspects() {
+      const res = await fetch("/api/aspects");
+      if (!res.ok) return;
+      const data = await res.json();
+      aspectData = data.rows.map(row => ({ name: row[0], levels: row[3] ? row[3].split(", ").filter(Boolean) : [] }));
+      rebuildConsequenceTableStructure();
+    }
+
+    // ── Hybrid dropdown/text input ─────────────────────────────
+    function buildHybridInput(aspectName, levels) {
+      const container = document.createElement("div");
+      container.className = "hybrid-input";
+      container.dataset.aspect = aspectName;
+
+      const select = document.createElement("select");
+      select.className = "level-select";
+
+      const blankOpt = document.createElement("option");
+      blankOpt.value = "";
+      blankOpt.textContent = "— select level —";
+      select.appendChild(blankOpt);
+
+      levels.forEach(level => {
+        const opt = document.createElement("option");
+        opt.value = level;
+        opt.textContent = level;
+        select.appendChild(opt);
+      });
+
+      const newOpt = document.createElement("option");
+      newOpt.value = NEW_LEVEL_SENTINEL;
+      newOpt.textContent = "New level...";
+      select.appendChild(newOpt);
+
+      const textInput = document.createElement("input");
+      textInput.type = "text";
+      textInput.className = "level-text";
+      textInput.placeholder = "New level value";
+      textInput.hidden = true;
+
+      select.addEventListener("change", () => {
+        const isNew = select.value === NEW_LEVEL_SENTINEL;
+        textInput.hidden = !isNew;
+        if (isNew) { textInput.value = ""; textInput.focus(); }
+      });
+
+      container.appendChild(select);
+      container.appendChild(textInput);
+      return container;
+    }
+
+    // ── Build / rebuild the consequences table thead + tfoot ───
+    function rebuildConsequenceTableStructure() {
+      const colCount = 1 + aspectData.length;
+
+      const headersRow = document.getElementById("consequencesHeaders");
+      headersRow.innerHTML = "";
+      ["Short name", ...aspectData.map(a => a.name)].forEach(h => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        headersRow.appendChild(th);
+      });
+
+      const inputsRow = document.querySelector(".add-consequence-inputs");
+      inputsRow.innerHTML = "";
+
+      const shortTd = document.createElement("td");
+      const shortInput = document.createElement("input");
+      shortInput.type = "text";
+      shortInput.id = "inputShortName";
+      shortInput.placeholder = "e.g. C1";
+      shortTd.appendChild(shortInput);
+      inputsRow.appendChild(shortTd);
+
+      aspectData.forEach(({ name, levels }) => {
+        const td = document.createElement("td");
+        td.appendChild(buildHybridInput(name, levels));
+        inputsRow.appendChild(td);
+      });
+
+      document.getElementById("addConsequenceActionCell").colSpan = colCount;
+      document.getElementById("addConsequenceNoticeCell").colSpan = colCount;
+    }
+
+    // ── Load consequences and populate tbody ───────────────────
+    async function loadConsequences() {
+      const tbody = document.getElementById("consequencesBody");
+      if (!tbody) return;
+
+      const res = await fetch("/api/consequences");
+      if (!res.ok) {
+        tbody.innerHTML = "<tr><td class='error'>Failed to load consequences.</td></tr>";
+        return;
+      }
+      const data = await res.json();
+
+      if (!data.rows || data.rows.length === 0) {
+        const colCount = 1 + aspectData.length;
+        tbody.innerHTML = `<tr><td colspan="${colCount}" class="muted">No consequences defined yet.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = "";
+      data.rows.forEach(row => {
+        const tr = document.createElement("tr");
+        row.forEach((cell, i) => {
+          const td = document.createElement("td");
+          if (i === 0) { const b = document.createElement("strong"); b.textContent = cell; td.appendChild(b); }
+          else { td.textContent = cell; }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ── Helper: get level value from a hybrid input ────────────
+    function getLevelValue(aspectName) {
+      const container = document.querySelector(
+        `.hybrid-input[data-aspect="${CSS.escape(aspectName)}"]`
+      );
+      if (!container) return "";
+      const select    = container.querySelector(".level-select");
+      const textInput = container.querySelector(".level-text");
+      return select.value === NEW_LEVEL_SENTINEL ? textInput.value.trim() : select.value;
+    }
+
+    // ── Add consequence ────────────────────────────────────────
+    document.getElementById("btnAddConsequence").addEventListener("click", async () => {
+      const shortName = document.getElementById("inputShortName").value.trim();
+      if (!shortName) { alert("Short name must be non-empty."); return; }
+
+      const payload = {};
+      let valid = true;
+      aspectData.forEach(({ name }) => {
+        const value = getLevelValue(name);
+        if (!value) { alert(`Please enter a level for aspect "${name}".`); valid = false; }
+        payload[name] = value;
+      });
+      if (!valid) return;
+
+      const res = await fetch("/api/consequences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ short_name: shortName, aspect_levels: payload })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const newLevels = json.new_levels || [];
+        const noticeRow = document.querySelector(".add-consequence-notice");
+        const notice = document.getElementById("newLevelsNotice");
+        if (newLevels.length > 0) {
+          notice.textContent = "New levels added: " + newLevels.join(", ");
+          noticeRow.hidden = false;
+        } else {
+          noticeRow.hidden = true;
+        }
+        document.getElementById("inputShortName").value = "";
+        await loadAspects();
+        await loadConsequences();
+      } else {
+        let msg = `${res.status} ${res.statusText}`;
+        try { const j = await res.json(); msg = j.error || msg; } catch {}
+        alert(msg);
+      }
+    });
+
+    document.getElementById("btnClearForm").addEventListener("click", () => {
+      document.getElementById("inputShortName").value = "";
+      document.querySelectorAll(".add-consequence-inputs .hybrid-input").forEach(container => {
+        container.querySelector(".level-select").value = "";
+        const ti = container.querySelector(".level-text");
+        ti.value = ""; ti.hidden = true;
+      });
+      const noticeRow = document.querySelector(".add-consequence-notice");
+      if (noticeRow) noticeRow.hidden = true;
+    });
+
+    // ── Consequence space dialog ───────────────────────────────
+    const dialog   = document.getElementById("consequenceSpaceDialog");
+    const btnShow  = document.getElementById("btnShowConsequenceSpace");
+    const btnClose = document.getElementById("btnCloseDialog");
+
+    function getNamedLevelTuples() {
+      const named = new Map();
+      const tbody = document.getElementById("consequencesBody");
+      if (!tbody) return named;
+      tbody.querySelectorAll("tr").forEach(tr => {
+        const cells = Array.from(tr.querySelectorAll("td"));
+        if (cells.length < 2) return;
+        const shortName = cells[0].textContent.trim();
+        const key = JSON.stringify(cells.slice(1).map(td => td.textContent.trim()));
+        named.set(key, shortName);
+      });
+      return named;
+    }
+
+    async function openConsequenceSpaceDialog() {
+      const res = await fetch("/api/consequence_space");
+      if (!res.ok) { alert("Could not load consequence space."); return; }
+      const data = await res.json();
+
+      const headersRow = document.getElementById("consequenceSpaceHeaders");
+      headersRow.innerHTML = "";
+      const nameTh = document.createElement("th");
+      nameTh.textContent = "Name";
+      headersRow.appendChild(nameTh);
+      data.headers.forEach(h => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        headersRow.appendChild(th);
+      });
+
+      const tbody = document.getElementById("consequenceSpaceBody");
+      tbody.innerHTML = "";
+      const namedMap = getNamedLevelTuples();
+
+      data.rows.forEach(row => {
+        const tr = document.createElement("tr");
+        const key = JSON.stringify(row);
+        const shortName = namedMap.get(key) ?? "";
+        if (shortName) tr.classList.add("named-consequence");
+
+        const nameTd = document.createElement("td");
+        nameTd.textContent = shortName;
+        tr.appendChild(nameTd);
+
+        row.forEach(cell => {
+          const td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+
+        tr.addEventListener("click", () => {
+          data.headers.forEach((aspectName, i) => {
+            const container = document.querySelector(
+              `.hybrid-input[data-aspect="${CSS.escape(aspectName)}"]`
+            );
+            if (!container) return;
+            const select    = container.querySelector(".level-select");
+            const textInput = container.querySelector(".level-text");
+            const value     = row[i];
+            const exists    = Array.from(select.options).some(o => o.value === value);
+            if (exists) {
+              select.value = value;
+              textInput.hidden = true;
+            } else {
+              select.value = NEW_LEVEL_SENTINEL;
+              textInput.hidden = false;
+              textInput.value = value;
+            }
+          });
+          dialog.close();
+          document.getElementById("inputShortName").focus();
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      dialog.showModal();
+    }
+
+    btnShow.addEventListener("click", openConsequenceSpaceDialog);
+    btnClose.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
+
+    // ── Initial load ───────────────────────────────────────────
+    loadAspects().then(loadConsequences);
+  </script>
 
 </body>
 </html>
