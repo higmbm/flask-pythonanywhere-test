@@ -393,7 +393,7 @@ class EudoxaManager:
         class_list = [sorted(cls) for cls in eq_classes]
         class_list.sort()
         rep   = {tuple(cls): cls[0] for cls in class_list}
-        label = {tuple(cls): " | ".join(cls) for cls in class_list}
+        label = {tuple(cls): " \u223c ".join(cls) for cls in class_list}
 
         # Step 2: build graph on equivalence classes
         nxdg = nx.DiGraph()
