@@ -301,3 +301,20 @@ button.primary:hover {
   cursor: pointer;
   color: #666;
 }
+
+/* ── Relation cell colours ───────────────────────────────── */
+.rel-better {
+  background: #e6f4ea !important;   /* green tint  — ≻ ⪰ */
+}
+
+.rel-equal {
+  background: #e8f0fe !important;   /* blue tint   — ∼  */
+}
+
+.rel-worse {
+  background: #fce8e6 !important;   /* red tint    — ≺ ⪯ */
+}
+
+.rel-unset {
+  background: #fffde7 !important;   /* yellow tint — unset */
+}

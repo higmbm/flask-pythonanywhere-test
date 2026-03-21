@@ -283,6 +283,13 @@
       return `${la} ${relPart} ${lb} | Click to edit relation. Click again to dismiss.`;
     }
 
+    function relCellClass(rel) {
+      if (rel === "\u227b" || rel === "\u2ab0") return "rel-better";  // ≻ ⪰
+      if (rel === "\u223c")                       return "rel-equal";   // ∼
+      if (rel === "\u227a" || rel === "\u2aaf") return "rel-worse";   // ≺ ⪯
+      return "rel-unset";
+    }
+
     function renderRelationsMatrix() {
       const wrapper = document.getElementById("relationsWrapper");
       wrapper.innerHTML = "";
@@ -340,8 +347,9 @@
             td.className = "rel-cell rel-diag";
             td.textContent = "\u223c";   // ∼ (EQ)
           } else {
-            td.className = "rel-cell rel-editable";
-            td.textContent = relCells[`${la}|||${lb}`] || "";
+            const rel = relCells[`${la}|||${lb}`] || "";
+            td.className = `rel-cell rel-editable ${relCellClass(rel)}`;
+            td.textContent = rel;
             td.title = cellTooltip(la, lb);
             td.addEventListener("click", e => { e.stopPropagation(); onCellClick(td); });
           }
@@ -363,7 +371,9 @@
       if (!td) return;
       const la = td.dataset.la;
       const lb = td.dataset.lb;
-      td.textContent = relCells[`${la}|||${lb}`] || "";
+      const rel = relCells[`${la}|||${lb}`] || "";
+      td.textContent = rel;
+      td.className = `rel-cell rel-editable ${relCellClass(rel)}`;
     }
 
     function makeCellDropdown(td) {
