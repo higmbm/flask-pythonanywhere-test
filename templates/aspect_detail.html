@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/aspect_detail.css') }}">
   <script src="{{ url_for('static', filename='common.js') }}"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
 
@@ -72,6 +73,12 @@
   <div id="inferencePanel" class="inference-panel" hidden>
     <div id="inferenceAdds"  class="inference-adds"  hidden></div>
     <div id="inferenceColls" class="inference-colls" hidden></div>
+  </div>
+
+  <!-- ── Level relations graph ────────────────────────────── -->
+  <h2>Level relations graph</h2>
+  <div id="levelGraphContainer" class="level-graph-container">
+    <p class="muted" id="levelGraphPlaceholder">Loading...</p>
   </div>
 
   <script>
@@ -456,6 +463,65 @@
     });
 
     loadRelations();
+    loadLevelGraph();
+
+    // ── Level relations graph ──────────────────────────────
+    async function loadLevelGraph() {
+      const container = document.getElementById("levelGraphContainer");
+      const placeholder = document.getElementById("levelGraphPlaceholder");
+      const res = await fetch(`/api/aspects/${encodeURIComponent(ASPECT_NAME)}/level-graph`);
+      if (!res.ok) {
+        if (placeholder) placeholder.textContent = "Could not load graph.";
+        return;
+      }
+      const data = await res.json();
+      if (data.nodes.length === 0) {
+        if (placeholder) placeholder.textContent = "No levels defined yet.";
+        return;
+      }
+      if (placeholder) placeholder.remove();
+
+      const nodes = new vis.DataSet(data.nodes);
+      const edges = new vis.DataSet(data.edges.map((e, i) => ({
+        ...e, id: i, arrows: "to"
+      })));
+
+      const options = {
+        layout: {
+          hierarchical: {
+            direction:        "UD",
+            sortMethod:       "directed",
+            levelSeparation:  80,
+            nodeSpacing:      120,
+            treeSpacing:      200
+          }
+        },
+        nodes: {
+          shape:     "box",
+          font:      { size: 14 },
+          color: {
+            background: "#dce8ff",
+            border:     "#7aa0e0",
+            highlight:  { background: "#b8d0ff", border: "#4a7fd4" }
+          },
+          margin:    8
+        },
+        edges: {
+          color:  { color: "#7aa0e0", highlight: "#4a7fd4" },
+          width:  1.5,
+          smooth: { type: "straightCross" }
+        },
+        interaction: {
+          dragNodes:   false,
+          zoomView:    true,
+          dragView:    true,
+          hover:       true
+        },
+        physics: { enabled: false }
+      };
+
+      new vis.Network(container, { nodes, edges }, options);
+    }
   </script>
 
 </body>

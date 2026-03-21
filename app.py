@@ -343,6 +343,35 @@ def get_relations(aspect_name):
     return {"levels": levels, "descriptions": descriptions, "options": options, "cells": cells}, 200
 
 
+@app.get("/api/aspects/<aspect_name>/level-graph")
+def get_level_graph(aspect_name):
+    """Return the transitively-reduced aspect level relations graph
+    as a node/edge list for client-side rendering."""
+    mgr = load_manager_or_400()
+    aspect = mgr.aspects.get(aspect_name)
+    if not aspect:
+        return {"error": f"Aspect '{aspect_name}' not found"}, 404
+    try:
+        import networkx as nx
+        nxdg = mgr.create_aspect_level_relations_graph(aspect_name)
+        nodes = [
+            {
+                "id":    level,
+                "label": level,
+                "title": aspect.levels.get(level) or level
+            }
+            for level in nxdg.nodes
+        ]
+        edges = [
+            {"from": src, "to": dst}
+            for src, dst in nxdg.edges
+        ]
+        return {"nodes": nodes, "edges": edges}, 200
+    except Exception:
+        logger.exception("Failed to build level graph")
+        return {"error": "Could not compute level graph."}, 500
+
+
 @app.patch("/api/aspects/<aspect_name>/relations/<la>/<lb>")
 def patch_relation(aspect_name, la, lb):
     mgr = load_manager_or_400()
