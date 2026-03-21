@@ -74,10 +74,11 @@
   <!-- Graph: hidden by default, shown above the matrix when toggled -->
   <div id="levelGraphSection" hidden>
 
-  <!-- Relation picker popup (shown when two nodes are selected) -->
-  <div id="graphRelPicker" class="graph-rel-picker" hidden>
-    <span id="graphRelPickerLabel" class="graph-rel-label"></span>
-    <div id="graphRelPickerBtns" class="graph-rel-btns"></div>
+  <!-- Relation picker (shown on first node click, active on second) -->
+  <div id="graphRelPicker" class="graph-rel-picker graph-rel-picker-hidden">
+    <span id="graphRelPickerLabelA" class="graph-rel-node-label graph-rel-placeholder">?</span>
+    <select id="graphRelPickerSel" class="graph-rel-select" disabled></select>
+    <span id="graphRelPickerLabelB" class="graph-rel-node-label graph-rel-placeholder">?</span>
     <button id="graphRelPickerCancel" class="graph-rel-cancel">Cancel</button>
   </div>
     <div class="level-graph-row">
@@ -104,12 +105,13 @@
     </div>
   </div>
 
-  <div id="relationsWrapper" class="relations-wrapper">
-    <p class="muted" id="relationsPlaceholder">Loading...</p>
-  </div>
   <div id="inferencePanel" class="inference-panel" hidden>
     <div id="inferenceAdds"  class="inference-adds"  hidden></div>
     <div id="inferenceColls" class="inference-colls" hidden></div>
+  </div>
+
+  <div id="relationsWrapper" class="relations-wrapper">
+    <p class="muted" id="relationsPlaceholder">Loading...</p>
   </div>
 
   <script>
@@ -585,43 +587,81 @@
       return map;
     }
 
+    function showPicker() {
+      document.getElementById("graphRelPicker").classList.remove("graph-rel-picker-hidden");
+    }
+
+    function hidePicker() {
+      document.getElementById("graphRelPicker").classList.add("graph-rel-picker-hidden");
+    }
+
     function clearFirstNode() {
       firstNode = null;
       if (definedNetwork) definedNetwork.unselectAll();
-      document.getElementById("graphRelPicker").hidden = true;
+      // Reset picker to empty waiting state
+      document.getElementById("graphRelPickerLabelA").textContent = "?";
+      document.getElementById("graphRelPickerLabelA").classList.add("graph-rel-placeholder");
+      document.getElementById("graphRelPickerLabelB").textContent = "?";
+      document.getElementById("graphRelPickerLabelB").classList.add("graph-rel-placeholder");
+      document.getElementById("graphRelPickerSel").innerHTML = "";
+      document.getElementById("graphRelPickerSel").disabled = true;
+      hidePicker();
     }
 
-    function showRelPicker(nodeAId, nodeBId) {
+    function onFirstNodeClick(nodeId) {
+      const members = nodeMembers[nodeId] || [];
+      const label   = members.join(" \u223c ");
+      const labelEl = document.getElementById("graphRelPickerLabelA");
+      labelEl.textContent = label;
+      labelEl.classList.remove("graph-rel-placeholder");
+      document.getElementById("graphRelPickerSel").disabled = true;
+      document.getElementById("graphRelPickerSel").innerHTML = "";
+      document.getElementById("graphRelPickerLabelB").textContent = "?";
+      document.getElementById("graphRelPickerLabelB").classList.add("graph-rel-placeholder");
+      showPicker();
+    }
+
+    function onSecondNodeClick(nodeAId, nodeBId) {
       const membersA = nodeMembers[nodeAId] || [];
       const membersB = nodeMembers[nodeBId] || [];
-      const labelA   = membersA.join(" \u223c ");
       const labelB   = membersB.join(" \u223c ");
 
-      const picker  = document.getElementById("graphRelPicker");
-      const lbl     = document.getElementById("graphRelPickerLabel");
-      const btnsDiv = document.getElementById("graphRelPickerBtns");
+      const labelBEl = document.getElementById("graphRelPickerLabelB");
+      labelBEl.textContent = labelB;
+      labelBEl.classList.remove("graph-rel-placeholder");
 
-      lbl.textContent = `${labelA} ? ${labelB}`;
-      btnsDiv.innerHTML = "";
+      // Determine current relation
+      const currentRel = (membersA.length && membersB.length)
+        ? (relCells[`${membersA[0]}|||${membersB[0]}`] ?? "")
+        : "";
 
-      // Only show: unset (—), ≻, ⪰, ∼
-      // ⪯ and ≺ are omitted — click B then A to set the reverse relation
+      // Build and enable dropdown
+      const sel = document.getElementById("graphRelPickerSel");
+      sel.innerHTML = "";
       const graphRelOptions = relOptions.filter(
         r => r === "" || r === "\u227b" || r === "\u2ab0" || r === "\u223c"
       );
       for (const rel of graphRelOptions) {
-        const btn = document.createElement("button");
-        btn.textContent = rel === "" ? "\u2014" : rel;
-        btn.className   = "graph-rel-opt-btn";
-        btn.addEventListener("click", async () => {
-          picker.hidden = true;
-          await applyGraphRelation(membersA, membersB, rel);
-          clearFirstNode();
-        });
-        btnsDiv.appendChild(btn);
+        const opt = document.createElement("option");
+        opt.value       = rel;
+        opt.textContent = rel === "" ? "\u2014" : rel;
+        if (rel === currentRel) opt.selected = true;
+        sel.appendChild(opt);
       }
 
-      picker.hidden = false;
+      // Apply immediately on change
+      const newSel = sel.cloneNode(true);
+      sel.parentNode.replaceChild(newSel, sel);
+      // Re-select current value after clone
+      for (const opt of newSel.options) {
+        if (opt.value === currentRel) { opt.selected = true; break; }
+      }
+      newSel.disabled = false;
+      newSel.addEventListener("change", async () => {
+        const rel = newSel.value;
+        clearFirstNode();
+        await applyGraphRelation(membersA, membersB, rel);
+      });
     }
 
     async function applyGraphRelation(membersA, membersB, rel) {
@@ -657,7 +697,9 @@
     );
 
     // Dismiss on click outside the graph section
+    // Ignore canvas clicks — Vis.js handles those via its own event system
     document.addEventListener("click", e => {
+      if (e.target.tagName === "CANVAS") return;
       const section = document.getElementById("levelGraphSection");
       if (section && !section.contains(e.target)) clearFirstNode();
     });
@@ -690,9 +732,15 @@
           definedNetwork.on("click", params => {
             if (params.nodes.length !== 1) { clearFirstNode(); return; }
             const clicked = params.nodes[0];
-            if (!firstNode) { firstNode = clicked; }
-            else if (firstNode === clicked) { clearFirstNode(); }
-            else { showRelPicker(firstNode, clicked); firstNode = null; }
+            if (!firstNode) {
+              firstNode = clicked;
+              onFirstNodeClick(clicked);
+            } else if (firstNode === clicked) {
+              clearFirstNode();
+            } else {
+              onSecondNodeClick(firstNode, clicked);
+              firstNode = null;
+            }
           });
         }
       }
@@ -730,10 +778,11 @@
           const clicked = params.nodes[0];
           if (!firstNode) {
             firstNode = clicked;
+            onFirstNodeClick(clicked);
           } else if (firstNode === clicked) {
             clearFirstNode();
           } else {
-            showRelPicker(firstNode, clicked);
+            onSecondNodeClick(firstNode, clicked);
             firstNode = null;
           }
         });

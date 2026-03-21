@@ -260,8 +260,7 @@ button.primary:hover {
 .graph-rel-picker {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.6rem;
   margin-bottom: 0.6rem;
   padding: 0.5rem 0.8rem;
   background: #f0f4ff;
@@ -270,21 +269,29 @@ button.primary:hover {
   font-size: 0.9rem;
 }
 
-.graph-rel-label {
+.graph-rel-picker-hidden {
+  display: none !important;
+}
+
+.graph-rel-node-label {
   font-weight: 600;
-  margin-right: 0.3rem;
+  min-width: 1.5rem;
 }
 
-.graph-rel-btns {
-  display: flex;
-  gap: 0.3rem;
+.graph-rel-placeholder {
+  color: #aaa;
+  font-weight: 400;
 }
 
-.graph-rel-opt-btn {
-  min-width: 2rem;
-  padding: 0.15rem 0.5rem;
+.graph-rel-select {
   font-size: 1rem;
+  padding: 0.1rem 0.3rem;
   cursor: pointer;
+}
+
+.graph-rel-select:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .graph-rel-cancel {
