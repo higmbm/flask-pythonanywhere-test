@@ -509,6 +509,41 @@ class EudoxaManager:
             return True
         return None
 
+    def dom_possible(self, ca: Consequence, cb: Consequence,
+                     aspect_rel: dict) -> str:
+        """Three-valued dominance check using pre-built aspect-local matrices.
+
+        Returns:
+          'confirmed' — all relations defined, ca dominates cb
+          'possible'  — no confirmed worse relation (WT/WTE) and at least one
+                        UNDEFINED relation (dominance can't be ruled out)
+          'none'      — confirmed non-dominance (WT/WTE found), or all
+                        relations defined but no dominance
+        """
+        n_bt  = 0
+        n_bte = 0
+        has_undefined = False
+        for an in self.aspects:
+            la  = ca[an]
+            lb  = cb[an]
+            rel = aspect_rel[an][(la, lb)]
+            if rel in (WT, WTE):
+                return 'none'
+            elif rel == UNDEFINED:
+                has_undefined = True
+            elif rel == EQ:
+                n_bte += 1
+            elif rel == BTE:
+                n_bte += 1
+            elif rel == BT:
+                n_bt += 1
+        if has_undefined:
+            return 'possible'
+        # All defined — standard dominance check
+        if n_bt + n_bte == len(self.aspects) and n_bt > 0:
+            return 'confirmed'
+        return 'none'
+
     def show_dominance_graph(self, nxdg, html_file: str):
         import networkx as nx
         import matplotlib as mpl
@@ -522,17 +557,147 @@ class EudoxaManager:
         ax.set_title("Consequence dominance graph")
         plt.show()
 
-    def create_dominance_graph(self):
-        import networkx as nx        
-        nxdg = nx.DiGraph()
-        for c in self.consequences.values():
-            nxdg.add_node(str(c))
-        for ca in self.consequences.values():
-            for cb in self.consequences.values():
-                dom_tf = self.dom(ca, cb)
-                if dom_tf:
-                    nxdg.add_edge(str(ca), str(cb))
-        return nx.transitive_reduction(nxdg)
+    def get_computable_consequences(self, use_closure: bool = False):
+        """Partition named consequences into those for which all pairwise
+        aspect level relations are defined, and those that are excluded.
+
+        Returns (included, excluded) where:
+          included  — list of short_name strings
+          excluded  — dict {short_name: [reason_string, ...]}
+
+        A consequence ca is excluded if there exists any other consequence cb
+        and any aspect for which rel(ca[aspect], cb[aspect]) is UNDEFINED.
+
+        When use_closure=True, the aspect-local Warshall closure is used
+        to check relations, so transitively derived relations count.
+        """
+        names  = list(self.consequences.keys())
+        if not names:
+            return [], {}
+
+        # Build aspect-local closures (or raw matrices) once per aspect
+        aspect_rel = {}   # {asp_name: {(la, lb): rel}}
+        for asp_name, aspect in self.aspects.items():
+            levels = list(aspect.levels.keys())
+            rel = {
+                (la, lb): self.get_aspect_level_relation(asp_name, la, lb)
+                for la in levels for lb in levels
+            }
+            if use_closure:
+                def compose(r1, r2):
+                    if r1 == EQ:  return r2
+                    if r2 == EQ:  return r1
+                    if r1 == BT  and r2 in (BT, BTE):  return BT
+                    if r1 == BTE and r2 == BTE:         return BTE
+                    if r1 == WT  and r2 in (WT, WTE):   return WT
+                    if r1 == WTE and r2 == WTE:          return WTE
+                    return None
+                _strength = {BT: 5, WT: 5, BTE: 3, WTE: 3, EQ: 1, UNDEFINED: 0}
+                def stronger(r1, r2):
+                    return r1 if _strength.get(r1, 0) >= _strength.get(r2, 0) else r2
+                for pivot in levels:
+                    for a in levels:
+                        for c in levels:
+                            if a == c: continue
+                            inferred = compose(rel[(a, pivot)], rel[(pivot, c)])
+                            if inferred:
+                                rel[(a, c)] = stronger(rel[(a, c)], inferred)
+            aspect_rel[asp_name] = rel
+
+        # Find excluded consequences: those with any UNDEFINED relation to another
+        excluded = {}   # {short_name: set of reason strings}
+        for na, ca in self.consequences.items():
+            for nb, cb in self.consequences.items():
+                if na == nb:
+                    continue
+                for asp_name in self.aspects:
+                    la = ca[asp_name]
+                    lb = cb[asp_name]
+                    if aspect_rel[asp_name][(la, lb)] == UNDEFINED:
+                        reason = f"{asp_name}: {la} vs {lb} (from {nb})"
+                        excluded.setdefault(na, set()).add(reason)
+
+        # Convert reason sets to sorted lists
+        excluded = {k: sorted(v) for k, v in excluded.items()}
+        included = [n for n in names if n not in excluded]
+        return included, excluded
+
+    def create_dominance_graph(self, use_tr: bool = True):
+        """Build a dominance graph with confirmed and possible edges.
+
+        Returns a dict:
+          nodes             — list of {id, complete} where complete=True means
+                              all pairwise relations to all other nodes are defined
+          edges_confirmed   — edges where dominance is confirmed (transitive-
+                              reduced if use_tr=True and graph is a DAG)
+          edges_possible    — edges where dominance is possible (never reduced)
+        """
+        import networkx as nx
+
+        consequences = self.consequences
+        if not consequences:
+            return {"nodes": [], "edges_confirmed": [], "edges_possible": []}
+
+        # Build aspect-local raw relation matrices once
+        aspect_rel = {}
+        for asp_name, aspect in self.aspects.items():
+            levels = list(aspect.levels.keys())
+            aspect_rel[asp_name] = {
+                (la, lb): self.get_aspect_level_relation(asp_name, la, lb)
+                for la in levels for lb in levels
+            }
+
+        # Classify each node as complete or incomplete
+        names = list(consequences.keys())
+        node_complete = {}
+        for na in names:
+            ca = consequences[na]
+            complete = all(
+                aspect_rel[an][(ca[an], consequences[nb][an])] != UNDEFINED
+                for nb in names if nb != na
+                for an in self.aspects
+            )
+            node_complete[na] = complete
+
+        # Classify each directed pair
+        confirmed_pairs = []
+        possible_pairs  = []
+        for na in names:
+            for nb in names:
+                if na == nb:
+                    continue
+                result = self.dom_possible(
+                    consequences[na], consequences[nb], aspect_rel
+                )
+                if result == 'confirmed':
+                    confirmed_pairs.append((str(consequences[na]),
+                                            str(consequences[nb])))
+                elif result == 'possible':
+                    possible_pairs.append((str(consequences[na]),
+                                           str(consequences[nb])))
+
+        # Optionally apply transitive reduction to confirmed edges
+        str_to_name = {str(c): n for n, c in consequences.items()}
+        if use_tr and confirmed_pairs:
+            g = nx.DiGraph()
+            for n in names:
+                g.add_node(str(consequences[n]))
+            g.add_edges_from(confirmed_pairs)
+            if nx.is_directed_acyclic_graph(g):
+                g = nx.transitive_reduction(g)
+                confirmed_pairs = list(g.edges)
+            # If not a DAG (shouldn't happen with consistent data), keep all
+
+        nodes = [
+            {"id": str(consequences[n]), "name": n,
+             "complete": node_complete[n]}
+            for n in names
+        ]
+        return {
+            "nodes":           nodes,
+            "edges_confirmed": confirmed_pairs,
+            "edges_possible":  possible_pairs
+        }
 
     def create_dominance_table(self) -> Dict[Tuple[str, str], bool]:
         dom_table = {}

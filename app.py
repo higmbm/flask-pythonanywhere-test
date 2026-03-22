@@ -504,17 +504,20 @@ def patch_level(aspect_name, level_name):
 # -----------------------------------------------------------
 @app.get("/api/dominance-graph")
 def get_dominance_graph():
-    """Return the transitively-reduced dominance graph as a node/edge list."""
+    """Return confirmed and possible dominance edges, plus node completeness.
+    Query param: tr=1 (default) applies transitive reduction to confirmed edges.
+    Response: { nodes, edges_confirmed, edges_possible }
+    """
     mgr = load_manager_or_400()
     if not mgr.consequences:
-        return {"nodes": [], "edges": []}, 200
+        return {"nodes": [], "edges_confirmed": [], "edges_possible": []}, 200
     try:
-        nxdg = mgr.create_dominance_graph()
-        # Build a reverse map from str(consequence) -> short_name
-        str_to_name = {str(c): name for name, c in mgr.consequences.items()}
+        from flask import request as freq
+        use_tr = freq.args.get("tr", "1") != "0"
+        graph  = mgr.create_dominance_graph(use_tr=use_tr)
 
-        def make_tooltip(short_name, consequence):
-            parts = [short_name] + [
+        def make_tooltip(name, consequence):
+            parts = [name] + [
                 f"{asp_name}: {consequence[asp_name]}"
                 for asp_name in mgr.aspects
             ]
@@ -522,20 +525,27 @@ def get_dominance_graph():
 
         nodes = [
             {
-                "id":    node,
-                "label": f"{str_to_name[node]}: {node}"
-                          if node in str_to_name else node,
-                "title": make_tooltip(str_to_name[node],
-                                      mgr.consequences[str_to_name[node]])
-                          if node in str_to_name else node
+                "id":       n["id"],
+                "label":    f"{n['name']}: {n['id']}",
+                "title":    make_tooltip(n["name"],
+                                         mgr.consequences[n["name"]]),
+                "complete": n["complete"]
             }
-            for node in nxdg.nodes
+            for n in graph["nodes"]
         ]
-        edges = [
+        edges_confirmed = [
             {"from": src, "to": dst}
-            for src, dst in nxdg.edges
+            for src, dst in graph["edges_confirmed"]
         ]
-        return {"nodes": nodes, "edges": edges}, 200
+        edges_possible = [
+            {"from": src, "to": dst}
+            for src, dst in graph["edges_possible"]
+        ]
+        return {
+            "nodes":           nodes,
+            "edges_confirmed": edges_confirmed,
+            "edges_possible":  edges_possible
+        }, 200
     except Exception:
         logger.exception("Failed to build dominance graph")
         return {"error": "Could not compute dominance graph."}, 500

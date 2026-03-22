@@ -27,3 +27,37 @@
   margin-bottom: 2rem;
   background: #fafafa;
 }
+
+
+/* ── Dominance graph exclusion report ───────────────────── */
+.dom-excluded {
+  margin-top: 0.8rem;
+  padding: 0.6rem 1rem;
+  background: #fff8e1;
+  border: 1px solid #f0c040;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.dom-excluded ul {
+  margin: 0.3rem 0 0 1.2rem;
+  padding: 0;
+}
+
+.dom-excluded li {
+  margin: 0.2rem 0;
+}
+
+/* ── Dominance graph legend ──────────────────────────────── */
+.dom-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: #444;
+}
+
+.legend-confirmed { color: #7aa0e0; }
+.legend-possible  { color: #aaa; }
+.legend-incomplete { color: #c8a800; }
