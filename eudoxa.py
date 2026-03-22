@@ -354,8 +354,9 @@ class EudoxaManager:
         Nodes are equivalence classes (sets of mutually EQ levels).
         Edges run from better classes to worse classes.
 
-        use_closure=True  — use the inferred closure for comparisons,
-                            so transitively derived relations are included.
+        use_closure=True  — compute aspect-local transitive closure (Warshall)
+                            before building the graph, so transitively derived
+                            relations are included. No full vdiff closure needed.
         use_closure=False — use only the explicitly set matrix entries.
         use_tr=True       — apply transitive reduction before returning.
         use_tr=False      — return the full graph without reduction.
@@ -366,22 +367,40 @@ class EudoxaManager:
         if not levels:
             return nx.DiGraph()
 
+        # Read the aspect-local relation matrix
+        rel = {
+            (la, lb): self.get_aspect_level_relation(aspect_name, la, lb)
+            for la in levels for lb in levels
+        }
+
         if use_closure:
-            closure, _, _ = self.closure()
-            def get_rel(la, lb):
-                zero  = VDiff(aspect_name, None, None)
-                vd_ab = VDiff(aspect_name, la, lb)
-                rel_ab_z = get_vdiff_relation(closure, vd_ab, zero)
-                rel_z_ab = get_vdiff_relation(closure, zero, vd_ab)
-                if rel_ab_z == TRUE and rel_z_ab == FALSE:     return BT
-                if rel_ab_z == TRUE and rel_z_ab == UNDEFINED: return BTE
-                if rel_ab_z == TRUE and rel_z_ab == TRUE:      return EQ
-                if rel_ab_z == UNDEFINED and rel_z_ab == TRUE: return WTE
-                if rel_ab_z == FALSE and rel_z_ab == TRUE:     return WT
-                return UNDEFINED
-        else:
-            def get_rel(la, lb):
-                return self.get_aspect_level_relation(aspect_name, la, lb)
+            # Composition table: compose(r1, r2) -> inferred relation or None
+            def compose(r1, r2):
+                if r1 == EQ:  return r2
+                if r2 == EQ:  return r1
+                if r1 == BT  and r2 in (BT, BTE): return BT
+                if r1 == BTE and r2 == BTE:        return BTE
+                if r1 == WT  and r2 in (WT, WTE):  return WT
+                if r1 == WTE and r2 == WTE:         return WTE
+                return None
+
+            # Strength ordering for picking the stronger of two relations
+            _strength = {BT: 5, WT: 5, BTE: 3, WTE: 3, EQ: 1, UNDEFINED: 0}
+            def stronger(r1, r2):
+                return r1 if _strength.get(r1, 0) >= _strength.get(r2, 0) else r2
+
+            # Warshall's algorithm on the aspect-local matrix
+            for pivot in levels:
+                for a in levels:
+                    for c in levels:
+                        if a == c:
+                            continue
+                        inferred = compose(rel[(a, pivot)], rel[(pivot, c)])
+                        if inferred:
+                            rel[(a, c)] = stronger(rel[(a, c)], inferred)
+
+        def get_rel(la, lb):
+            return rel[(la, lb)]
 
         # Step 1: compute equivalence classes (X ~ Y iff EQ)
         eq_classes = nx.equivalence_classes(

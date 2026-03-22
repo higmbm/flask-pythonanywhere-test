@@ -204,6 +204,20 @@ def add_aspect():
     return {"message": "Aspect added"}, 201
 
 
+@app.get("/api/level-descriptions")
+def get_level_descriptions():
+    """Return all aspect level descriptions as a nested dict:
+    { aspect_name: { level: description } }"""
+    mgr = load_manager_or_400()
+    result = {}
+    for asp_name, aspect in mgr.aspects.items():
+        result[asp_name] = {
+            level: desc or ""
+            for level, desc in aspect.levels.items()
+        }
+    return result, 200
+
+
 @app.get("/api/aspects")
 def list_aspects():
     """

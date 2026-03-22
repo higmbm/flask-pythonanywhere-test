@@ -364,10 +364,15 @@
     }
 
     // ── Load and render aspects table ──────────────────────────
-    let aspectData = [];  // [{name, dtype, description, levels[]}]
+    let aspectData = [];
+    let levelDescs  = {};  // {aspectName: {level: description}}  // [{name, dtype, description, levels[]}]
 
     async function loadAspects() {
-      const res = await fetch("/api/aspects");
+      const [res, descRes] = await Promise.all([
+        fetch("/api/aspects"),
+        fetch("/api/level-descriptions")
+      ]);
+      if (descRes.ok) levelDescs = await descRes.json();
       if (!res.ok) return;
       const data = await res.json();
 
@@ -624,8 +629,16 @@
         const tr = document.createElement("tr");
         row.forEach((cell, i) => {
           const td = document.createElement("td");
-          if (i === 0) { const b = document.createElement("strong"); b.textContent = cell; td.appendChild(b); }
-          else { td.textContent = cell; }
+          if (i === 0) {
+            const b = document.createElement("strong");
+            b.textContent = cell;
+            td.appendChild(b);
+          } else {
+            td.textContent = cell;
+            const aspName = aspectData[i - 1]?.name;
+            const desc = aspName && levelDescs[aspName]?.[cell];
+            if (desc) td.title = desc;
+          }
           tr.appendChild(td);
         });
         tbody.appendChild(tr);

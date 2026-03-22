@@ -74,14 +74,19 @@
 
   <script>
     const NEW_LEVEL_SENTINEL = "__new__";
-    let aspectData = [];  // [{name, levels}, ...]
+    let aspectData   = [];  // [{name, levels}, ...]
+    let levelDescs   = {};  // {aspectName: {level: description}}
 
     // ── Load aspects (needed to build add-consequence form) ────
     async function loadAspects() {
-      const res = await fetch("/api/aspects");
-      if (!res.ok) return;
-      const data = await res.json();
+      const [aspRes, descRes] = await Promise.all([
+        fetch("/api/aspects"),
+        fetch("/api/level-descriptions")
+      ]);
+      if (!aspRes.ok) return;
+      const data = await aspRes.json();
       aspectData = data.rows.map(row => ({ name: row[0], levels: row[3] ? row[3].split(", ").filter(Boolean) : [] }));
+      if (descRes.ok) levelDescs = await descRes.json();
       rebuildConsequenceTableStructure();
     }
 
@@ -184,8 +189,17 @@
         const tr = document.createElement("tr");
         row.forEach((cell, i) => {
           const td = document.createElement("td");
-          if (i === 0) { const b = document.createElement("strong"); b.textContent = cell; td.appendChild(b); }
-          else { td.textContent = cell; }
+          if (i === 0) {
+            const b = document.createElement("strong");
+            b.textContent = cell;
+            td.appendChild(b);
+          } else {
+            td.textContent = cell;
+            // Add tooltip if a description exists for this level
+            const aspName = aspectData[i - 1]?.name;
+            const desc = aspName && levelDescs[aspName]?.[cell];
+            if (desc) td.title = desc;
+          }
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
