@@ -61,3 +61,42 @@
 .legend-confirmed { color: #7aa0e0; }
 .legend-possible  { color: #aaa; }
 .legend-incomplete { color: #c8a800; }
+
+/* ── Dominance graph comparison panel ───────────────────── */
+.dom-compare {
+  margin-top: 0.8rem;
+}
+
+.dom-compare-table {
+  border-collapse: collapse;
+}
+
+.dom-compare-table td {
+  text-align: center;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid #ddd;
+  font-size: 0.95rem;
+}
+
+.dom-compare-name {
+  font-weight: 600;
+  text-align: left !important;
+  white-space: nowrap;
+}
+
+.dom-compare-divider {
+  background: #f4f4f4;
+  border-color: #ccc !important;
+}
+
+.dom-compare-rel {
+  font-size: 1.1rem;
+  font-weight: 600;
+  min-width: 2.5rem;
+}
+
+/* Relation cell colours (mirrors aspect_detail.css) */
+.rel-better { background: #e6f4ea !important; }
+.rel-equal  { background: #e8f0fe !important; }
+.rel-worse  { background: #fce8e6 !important; }
+.rel-unset  { background: #fffde7 !important; }

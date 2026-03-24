@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/consequences.css') }}">
   <script src="{{ url_for('static', filename='common.js') }}"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
 
@@ -18,6 +17,7 @@
     <div class="section-header">
       <h2>Named consequences</h2>
       <button id="btnShowConsequenceSpace">Show consequence space</button>
+      <a href="/dominance-graph" class="header-link-button">Show dominance graph</a>
     </div>
     <table class="data-table consequences-table" id="consequencesTable">
       <thead>
@@ -45,23 +45,6 @@
       </tfoot>
     </table>
 
-    <div class="section-header" style="margin-top: 2rem;">
-      <h2>Dominance graph</h2>
-      <button id="btnToggleDomGraph">Show dominance graph</button>
-      <button id="btnDomTr" class="toggle-graph-btn" data-tr="true"
-              title="Toggle transitive reduction" hidden>
-        Show full graph
-      </button>
-    </div>
-    <div id="domGraphSection" hidden>
-      <div id="domGraphLegend" class="dom-legend" hidden>
-        <span class="legend-confirmed">&#9658; Confirmed dominance</span>
-        <span class="legend-possible">&#9658; Possible dominance (? = undefined relations)</span>
-        <span class="legend-incomplete">&#9632; Incomplete node (some relations undefined)</span>
-      </div>
-      <div id="domGraphContainer" class="level-graph-container"></div>
-      <div id="domGraphExcluded" class="dom-excluded" hidden></div>
-    </div>
   </section>
 
   <!-- ── Consequence space dialog ─────────────────────────── -->
@@ -369,160 +352,7 @@
     btnClose.addEventListener("click", () => dialog.close());
     dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
 
-    // ── Dominance graph ────────────────────────────────────────
-    let domGraphVisible = false;
-    let domGraphDirty   = true;
-    let domNetwork      = null;
 
-    const btnToggleDomGraph = document.getElementById("btnToggleDomGraph");
-    const domGraphSection   = document.getElementById("domGraphSection");
-
-    btnToggleDomGraph.addEventListener("click", async () => {
-      domGraphVisible = !domGraphVisible;
-      domGraphSection.hidden = !domGraphVisible;
-      btnToggleDomGraph.textContent = domGraphVisible ? "Hide dominance graph" : "Show dominance graph";
-      if (domGraphVisible) {
-        await renderDomGraph();
-      }
-    });
-
-    // ── Dominance graph state ─────────────────────────────────
-    let domTrActive = true;
-
-    const btnDomTr = document.getElementById("btnDomTr");
-    btnDomTr.addEventListener("click", () => {
-      domTrActive = !domTrActive;
-      btnDomTr.dataset.tr  = domTrActive;
-      btnDomTr.textContent = domTrActive ? "Show full graph" : "Show reduction";
-      renderDomGraph();
-    });
-
-    async function renderDomGraph() {
-      const container  = document.getElementById("domGraphContainer");
-      const legendEl   = document.getElementById("domGraphLegend");
-      const excludedEl = document.getElementById("domGraphExcluded");
-      if (!container) return;
-      container.innerHTML = "";
-
-      const url = "/api/dominance-graph?tr=" + (domTrActive ? "1" : "0");
-      const res = await fetch(url);
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        container.innerHTML = `<p class='error'>${errData.error || 'Could not load dominance graph.'}</p>`;
-        legendEl.hidden = true; excludedEl.hidden = true;
-        return;
-      }
-      const data = await res.json();
-
-      if (data.nodes.length === 0) {
-        container.innerHTML = "<p class='muted'>No consequences defined yet.</p>";
-        legendEl.hidden = true; excludedEl.hidden = true;
-        return;
-      }
-
-      // Node colours: blue = complete, yellow = incomplete
-      const visNodes = new vis.DataSet(data.nodes.map(n => ({
-        id: n.id, label: n.label, title: n.title,
-        color: n.complete
-          ? { background: "#dce8ff", border: "#7aa0e0",
-              highlight: { background: "#b8d0ff", border: "#4a7fd4" } }
-          : { background: "#fff8dc", border: "#c8a800",
-              highlight: { background: "#fff0a0", border: "#a07800" } }
-      })));
-
-      // Confirmed: solid blue; possible: dashed grey with '?' label
-      const edgeList = [];
-      data.edges_confirmed.forEach((e, i) => edgeList.push({
-        id: "c" + i, from: e.from, to: e.to, arrows: "to",
-        color: { color: "#7aa0e0", highlight: "#4a7fd4" },
-        width: 1.5, dashes: false
-      }));
-      data.edges_possible.forEach((e, i) => edgeList.push({
-        id: "p" + i, from: e.from, to: e.to, arrows: "to",
-        color: { color: "#aaa", highlight: "#888" },
-        width: 1, dashes: true, label: "?",
-        font: { size: 11, color: "#888", align: "middle" }
-      }));
-      const visEdges = new vis.DataSet(edgeList);
-
-      const hasPossible   = data.edges_possible.length > 0;
-      const hasIncomplete = data.nodes.some(n => !n.complete);
-
-      // Legend: show relevant entries only
-      legendEl.hidden = false;
-      legendEl.querySelector(".legend-possible").hidden   = !hasPossible;
-      legendEl.querySelector(".legend-incomplete").hidden = !hasIncomplete;
-
-      // TR toggle: only meaningful when no possible edges exist
-      btnDomTr.hidden = hasPossible;
-      excludedEl.hidden = true;
-
-      // Hierarchical layout only works on DAGs; fall back to free layout
-      // when possible (potentially cyclic) edges are present
-      const options = hasPossible ? {
-        layout: { hierarchical: false },
-        nodes: {
-          shape:  "box",
-          font:   { size: 16, face: "system-ui, -apple-system, sans-serif",
-                    color: "#333" },
-          margin: 12
-        },
-        edges: { smooth: { type: "curvedCW", roundness: 0.2 } },
-        interaction: {
-          dragNodes: true, zoomView: true, dragView: true, hover: true
-        },
-        physics: {
-          enabled: true,
-          stabilization: { iterations: 200, fit: true }
-        }
-      } : {
-        layout: {
-          hierarchical: {
-            direction:       "UD",
-            sortMethod:      "directed",
-            levelSeparation: 80,
-            nodeSpacing:     120,
-            treeSpacing:     200
-          }
-        },
-        nodes: {
-          shape:  "box",
-          font:   { size: 16, face: "system-ui, -apple-system, sans-serif",
-                    color: "#333" },
-          margin: 12
-        },
-        edges: { smooth: { type: "straightCross" } },
-        interaction: {
-          dragNodes: true, zoomView: true, dragView: true, hover: true
-        },
-        physics: { enabled: false }
-      };
-      domNetwork = new vis.Network(container,
-                                   { nodes: visNodes, edges: visEdges },
-                                   JSON.parse(JSON.stringify(options)));
-
-      // Once physics has arranged the nodes, disable it so they stay put
-      if (hasPossible) {
-        domNetwork.once("stabilized", () => {
-          domNetwork.setOptions({ physics: { enabled: false } });
-        });
-      }
-
-      // In hierarchical mode, lock y so nodes only drag sideways
-      if (!hasPossible) {
-        const lockedY = {};
-        domNetwork.once("stabilized", () => {
-          const pos = domNetwork.getPositions();
-          Object.keys(pos).forEach(id => { lockedY[id] = pos[id].y; });
-        });
-        domNetwork.on("dragEnd", params => {
-          if (!params.nodes.length) return;
-          const id = params.nodes[0];
-          if (lockedY[id] !== undefined)
-            domNetwork.moveNode(id, domNetwork.getPositions([id])[id].x, lockedY[id]);
-        });
-      }
-    }
     // ── Initial load ───────────────────────────────────────────
     loadAspects().then(loadConsequences);
   </script>

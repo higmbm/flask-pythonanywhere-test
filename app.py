@@ -529,7 +529,12 @@ def get_dominance_graph():
                 "label":    f"{n['name']}: {n['id']}",
                 "title":    make_tooltip(n["name"],
                                          mgr.consequences[n["name"]]),
-                "complete": n["complete"]
+                "complete": n["complete"],
+                "name":     n["name"],
+                "levels":   {
+                    asp: str(mgr.consequences[n["name"]][asp])
+                    for asp in mgr.aspects
+                }
             }
             for n in graph["nodes"]
         ]
@@ -548,7 +553,13 @@ def get_dominance_graph():
         }, 200
     except Exception as e:
         logger.exception("Failed to build dominance graph")
-        return {"error": f"Could not compute dominance graph: {e}"}, 500
+        import sys
+        return {"error": f"Could not compute dominance graph: {e} | Python: {sys.executable} | Path: {sys.path}"}, 500
+
+
+@app.get("/dominance-graph")
+def dominance_graph_html():
+    return render_template("dominance_graph.html")
 
 
 @app.get("/consequences")

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Dominance graph</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/consequences.css') }}">
+  <script src="{{ url_for('static', filename='common.js') }}"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+
+  <h1>Dominance graph</h1>
+
+  <section class="section">
+    <div class="section-header">
+      <h2>Graph</h2>
+      <button id="btnDomTr" class="toggle-graph-btn" data-tr="true"
+              title="Toggle transitive reduction" hidden>
+        Show full graph
+      </button>
+    </div>
+
+    <div id="domGraphLegend" class="dom-legend" hidden>
+      <span class="legend-confirmed">&#9658; Confirmed dominance</span>
+      <span class="legend-possible">&#9658; Possible dominance (? = undefined relations)</span>
+      <span class="legend-incomplete">&#9632; Incomplete node (some relations undefined)</span>
+    </div>
+    <div id="domGraphContainer" class="level-graph-container"></div>
+    <div id="domGraphExcluded" class="dom-excluded" hidden></div>
+    <div id="domCompare" class="dom-compare" hidden></div>
+  </section>
+
+  <script>
+    // ── Dominance graph state ─────────────────────────────────
+    let domNetwork  = null;
+    let domTrActive = true;
+
+    const btnDomTr = document.getElementById("btnDomTr");
+    btnDomTr.addEventListener("click", () => {
+      domTrActive = !domTrActive;
+      btnDomTr.dataset.tr  = domTrActive;
+      btnDomTr.textContent = domTrActive ? "Show full graph" : "Show reduction";
+      renderDomGraph();
+    });
+
+    async function renderDomGraph() {
+      const container  = document.getElementById("domGraphContainer");
+      const legendEl   = document.getElementById("domGraphLegend");
+      const excludedEl = document.getElementById("domGraphExcluded");
+      if (!container) return;
+      container.innerHTML = "";
+
+      const url = "/api/dominance-graph?tr=" + (domTrActive ? "1" : "0");
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        container.innerHTML = `<p class='error'>${errData.error || 'Could not load dominance graph.'}</p>`;
+        legendEl.hidden = true; excludedEl.hidden = true;
+        return;
+      }
+      const data = await res.json();
+
+      if (data.nodes.length === 0) {
+        container.innerHTML = "<p class='muted'>No consequences defined yet.</p>";
+        legendEl.hidden = true; excludedEl.hidden = true;
+        return;
+      }
+
+      // Build node lookup for comparison panel
+      domAspects = [];
+      domNodeData = {};
+      data.nodes.forEach(n => {
+        domNodeData[n.id] = { name: n.name, levels: n.levels };
+        if (domAspects.length === 0 && n.levels)
+          domAspects = Object.keys(n.levels);
+      });
+
+      // Node colours: blue = complete, yellow = incomplete
+      const visNodes = new vis.DataSet(data.nodes.map(n => ({
+        id: n.id, label: n.label, title: n.title,
+        color: n.complete
+          ? { background: "#dce8ff", border: "#7aa0e0",
+              highlight: { background: "#b8d0ff", border: "#4a7fd4" } }
+          : { background: "#fff8dc", border: "#c8a800",
+              highlight: { background: "#fff0a0", border: "#a07800" } }
+      })));
+
+      // Confirmed: solid blue; possible: dashed grey with '?' label
+      const edgeList = [];
+      data.edges_confirmed.forEach((e, i) => edgeList.push({
+        id: "c" + i, from: e.from, to: e.to, arrows: "to",
+        color: { color: "#7aa0e0", highlight: "#4a7fd4" },
+        width: 1.5, dashes: false
+      }));
+      data.edges_possible.forEach((e, i) => edgeList.push({
+        id: "p" + i, from: e.from, to: e.to, arrows: "to",
+        color: { color: "#aaa", highlight: "#888" },
+        width: 1, dashes: true, label: "?",
+        font: { size: 11, color: "#888", align: "middle" }
+      }));
+      const visEdges = new vis.DataSet(edgeList);
+
+      const hasPossible   = data.edges_possible.length > 0;
+      const hasIncomplete = data.nodes.some(n => !n.complete);
+
+      legendEl.hidden = false;
+      legendEl.querySelector(".legend-possible").hidden   = !hasPossible;
+      legendEl.querySelector(".legend-incomplete").hidden = !hasIncomplete;
+
+      btnDomTr.hidden = hasPossible;
+      excludedEl.hidden = true;
+
+      const options = hasPossible ? {
+        layout: { hierarchical: false },
+        nodes: {
+          shape:  "box",
+          font:   { size: 16, face: "system-ui, -apple-system, sans-serif", color: "#333" },
+          margin: 12
+        },
+        edges: { smooth: { type: "curvedCW", roundness: 0.2 } },
+        interaction: { dragNodes: true, zoomView: true, dragView: true, hover: true },
+        physics: { enabled: true, stabilization: { iterations: 200, fit: true } }
+      } : {
+        layout: {
+          hierarchical: {
+            direction: "UD", sortMethod: "directed",
+            levelSeparation: 80, nodeSpacing: 120, treeSpacing: 200
+          }
+        },
+        nodes: {
+          shape:  "box",
+          font:   { size: 16, face: "system-ui, -apple-system, sans-serif", color: "#333" },
+          margin: 12
+        },
+        edges: { smooth: { type: "straightCross" } },
+        interaction: { dragNodes: true, zoomView: true, dragView: true, hover: true },
+        physics: { enabled: false }
+      };
+
+      domNetwork = new vis.Network(container,
+                                   { nodes: visNodes, edges: visEdges },
+                                   JSON.parse(JSON.stringify(options)));
+
+      clearDomSelection();
+      domNetwork.on("click", params => {
+        if (params.nodes.length !== 1) { clearDomSelection(); return; }
+        const clicked = params.nodes[0];
+        if (!domFirstNode) {
+          domFirstNode = clicked;
+          showFirstNode(clicked);
+        } else if (domFirstNode === clicked) {
+          clearDomSelection();
+        } else {
+          showDomCompare(domFirstNode, clicked);
+          domFirstNode = null;
+        }
+      });
+
+      if (hasPossible) {
+        domNetwork.once("stabilized", () => {
+          domNetwork.setOptions({ physics: { enabled: false } });
+        });
+      }
+
+      if (!hasPossible) {
+        const lockedY = {};
+        domNetwork.once("stabilized", () => {
+          const pos = domNetwork.getPositions();
+          Object.keys(pos).forEach(id => { lockedY[id] = pos[id].y; });
+        });
+        domNetwork.on("dragEnd", params => {
+          if (!params.nodes.length) return;
+          const id = params.nodes[0];
+          if (lockedY[id] !== undefined)
+            domNetwork.moveNode(id, domNetwork.getPositions([id])[id].x, lockedY[id]);
+        });
+      }
+    }
+
+    // ── Node comparison panel ─────────────────────────────────
+    let domFirstNode = null;
+    let domNodeData  = {};
+    let domAspects   = [];
+
+    function relClass(rel) {
+      if (rel === "\u227b" || rel === "\u2ab0") return "rel-better";
+      if (rel === "\u223c")                     return "rel-equal";
+      if (rel === "\u227a" || rel === "\u2aaf") return "rel-worse";
+      return "rel-unset";
+    }
+
+    function clearDomSelection() {
+      domFirstNode = null;
+      if (domNetwork) domNetwork.unselectAll();
+      document.getElementById("domCompare").hidden = true;
+    }
+
+    function showFirstNode(idA) {
+      const panel = document.getElementById("domCompare");
+      const a = domNodeData[idA];
+      if (!a) return;
+      let html = `<table class="data-table dom-compare-table">`;
+      html += `<tr><td class="dom-compare-name">${a.name}</td>`;
+      domAspects.forEach(asp => { html += `<td>${a.levels[asp] ?? ""}</td>`; });
+      html += "</tr></table>";
+      panel.innerHTML = html;
+      panel.hidden = false;
+    }
+
+    function showDomCompare(idA, idB) {
+      const panel = document.getElementById("domCompare");
+      const a = domNodeData[idA];
+      const b = domNodeData[idB];
+      if (!a || !b) return;
+      fetchAndRenderComparison(a, b, panel);
+    }
+
+    async function fetchAndRenderComparison(a, b, panel) {
+      const relMaps = {};
+      await Promise.all(domAspects.map(async asp => {
+        const res = await fetch(`/api/aspects/${encodeURIComponent(asp)}/relations`);
+        if (res.ok) {
+          const data = await res.json();
+          relMaps[asp] = data.cells || {};
+        }
+      }));
+
+      let html = `<table class="data-table dom-compare-table">`;
+
+      html += `<tr><td class="dom-compare-name">${a.name}</td>`;
+      domAspects.forEach(asp => { html += `<td>${a.levels[asp] ?? ""}</td>`; });
+      html += "</tr>";
+
+      html += `<tr><td class="dom-compare-divider"></td>`;
+      domAspects.forEach(asp => {
+        const la  = a.levels[asp] ?? "";
+        const lb  = b.levels[asp] ?? "";
+        const rel = relMaps[asp]?.[`${la}|||${lb}`] ?? "";
+        const lbl = rel === "" ? "?" : rel;
+        html += `<td class="${relClass(rel)} dom-compare-rel">${lbl}</td>`;
+      });
+      html += "</tr>";
+
+      html += `<tr><td class="dom-compare-name">${b.name}</td>`;
+      domAspects.forEach(asp => { html += `<td>${b.levels[asp] ?? ""}</td>`; });
+      html += "</tr></table>";
+
+      panel.innerHTML = html;
+      panel.hidden = false;
+    }
+
+    document.addEventListener("click", e => {
+      if (e.target.tagName === "CANVAS") return;
+      const section = document.querySelector(".section");
+      if (section && !section.contains(e.target)) clearDomSelection();
+    });
+
+    // ── Initial render ────────────────────────────────────────
+    renderDomGraph();
+  </script>
+
+</body>
+</html>
