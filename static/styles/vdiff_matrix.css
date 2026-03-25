@@ -1,0 +1,64 @@
+/* ============================================================
+   vdiff_matrix.css — Value difference relation matrix view
+   ============================================================ */
+
+.vdiff-selectors {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.vdiff-selectors label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+}
+
+/* ── Matrix table ─────────────────────────────────────────── */
+.vdiff-table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.vdiff-corner {
+  position: relative;
+  min-width: 8rem;
+  background: #f4f4f4;
+  font-weight: normal;
+  font-size: 0.75rem;
+  color: #888;
+  padding: 0.3rem 0.5rem;
+}
+
+.vdiff-row-label {
+  display: block;
+  text-align: left;
+}
+
+.vdiff-col-label {
+  display: block;
+  text-align: right;
+}
+
+.vdiff-col-header,
+.vdiff-row-header {
+  background: #f4f4f4;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  padding: 0.3rem 0.6rem;
+}
+
+.vdiff-cell {
+  text-align: center;
+  padding: 0.3rem 0.6rem;
+  min-width: 2.5rem;
+  font-size: 1rem;
+}
+
+/* ── Cell colours ─────────────────────────────────────────── */
+.vdiff-true  { background: #e6f4ea !important; }   /* ⊒ — green  */
+.vdiff-false { background: #fce8e6 !important; }   /* ⋣ — red    */
+.vdiff-undef { background: #fffde7 !important; }   /* — — yellow */

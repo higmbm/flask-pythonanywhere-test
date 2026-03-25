@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Value difference relations</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/vdiff_matrix.css') }}">
+  <script src="{{ url_for('static', filename='common.js') }}"></script>
+  <script src="{{ url_for('static', filename='nav.js') }}" defer></script>
+</head>
+<body>
+
+  <h1>Value difference relations</h1>
+
+  <section class="section">
+    <div class="section-header">
+      <h2>Select aspect pair</h2>
+    </div>
+    <div class="vdiff-selectors">
+      <label>Row aspect:
+        <select id="selAn1">
+          {% for name in aspect_names %}
+          <option value="{{ name }}">{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Column aspect:
+        <select id="selAn2">
+          {% for name in aspect_names %}
+          <option value="{{ name }}">{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button id="btnLoad" class="primary">Show matrix</button>
+    </div>
+  </section>
+
+  <section class="section" id="matrixSection" hidden>
+    <div class="section-header">
+      <h2 id="matrixTitle"></h2>
+    </div>
+    <div id="matrixWrapper"></div>
+  </section>
+
+  <script>
+    const ASPECT_NAMES = {{ aspect_names | tojson }};
+
+    document.getElementById("btnLoad").addEventListener("click", loadMatrix);
+
+    // Auto-load on page open with first aspect pair
+    if (ASPECT_NAMES.length > 0) loadMatrix();
+
+    async function loadMatrix() {
+      const an1 = document.getElementById("selAn1").value;
+      const an2 = document.getElementById("selAn2").value;
+
+      const res = await fetch(
+        `/api/vdiff-matrix/${encodeURIComponent(an1)}/${encodeURIComponent(an2)}`
+      );
+      if (!res.ok) {
+        document.getElementById("matrixWrapper").innerHTML =
+          "<p class='error'>Could not load matrix.</p>";
+        document.getElementById("matrixSection").hidden = false;
+        return;
+      }
+      const data = await res.json();
+
+      document.getElementById("matrixTitle").textContent =
+        `Δ(${an1}) vs Δ(${an2})`;
+      document.getElementById("matrixSection").hidden = false;
+
+      renderMatrix(data, document.getElementById("matrixWrapper"));
+    }
+
+    function cellClass(rel) {
+      if (rel === "\u22d2") return "vdiff-true";   // ⊒
+      if (rel === "\u22d3") return "vdiff-false";  // ⋣
+      return "vdiff-undef";
+    }
+
+    function renderMatrix(data, wrapper) {
+      if (data.row_labels.length === 0) {
+        wrapper.innerHTML = "<p class='muted'>No value differences defined.</p>";
+        return;
+      }
+
+      const table = document.createElement("table");
+      table.className = "data-table vdiff-table";
+
+      // Header row
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      // Corner cell showing row-aspect \ col-aspect
+      const corner = document.createElement("th");
+      corner.className = "vdiff-corner";
+      corner.innerHTML = "<span class='vdiff-row-label'>row</span>"
+                       + "<span class='vdiff-col-label'>col</span>";
+      headerRow.appendChild(corner);
+      data.col_labels.forEach(lbl => {
+        const th = document.createElement("th");
+        th.textContent = lbl;
+        th.className = "vdiff-col-header";
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Body rows
+      const tbody = document.createElement("tbody");
+      data.cells.forEach((row, ri) => {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.textContent = data.row_labels[ri];
+        th.className = "vdiff-row-header";
+        tr.appendChild(th);
+        row.forEach(rel => {
+          const td = document.createElement("td");
+          td.className = "vdiff-cell " + cellClass(rel);
+          td.textContent = rel === "" ? "\u2014" : rel;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+
+      wrapper.innerHTML = "";
+      wrapper.appendChild(table);
+    }
+  </script>
+
+</body>
+</html>

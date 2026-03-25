@@ -30,6 +30,8 @@
     });
     nav.appendChild(sep());
     nav.appendChild(link("/consequences", "Consequences"));
+    nav.appendChild(sep());
+    nav.appendChild(link("/vdiff-matrix", "Vdiff matrix"));
 
     // Insert before the first h1
     const h1 = document.querySelector("h1");
