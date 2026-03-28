@@ -41,6 +41,10 @@
       <h2 id="matrixTitle"></h2>
     </div>
     <div id="matrixWrapper"></div>
+    <div id="inferencePanel" class="inference-panel" hidden>
+      <div id="inferenceAdds"  class="inference-adds"  hidden></div>
+      <div id="inferenceColls" class="inference-colls" hidden></div>
+    </div>
   </section>
 
   <script>
@@ -71,6 +75,47 @@
       document.getElementById("matrixSection").hidden = false;
 
       renderMatrix(data, document.getElementById("matrixWrapper"));
+    }
+
+    // Order relation options shown in dropdowns
+    const GT  = "⊐", GTE = "⊒", DEQ = "≜",
+          LTE = "⊑", LT  = "⊏";
+    const TRUE_SYM  = "⊒";   // ⊒  (same as GTE)
+    const FALSE_SYM = "⋓";   // ⋣
+    const ORDER_OPTIONS = [
+      { value: GT,  label: GT  },
+      { value: GTE, label: GTE },
+      { value: DEQ, label: DEQ },
+      { value: LTE, label: LTE },
+      { value: LT,  label: LT  },
+      { value: "",  label: "—" },
+    ];
+
+    function showInferencePanel(la, rel, lb, adds, inferredAdds, colls) {
+      const panel    = document.getElementById("inferencePanel");
+      const addsDiv  = document.getElementById("inferenceAdds");
+      const collsDiv = document.getElementById("inferenceColls");
+      clearTimeout(panel._hideTimer);
+      addsDiv.hidden = true; collsDiv.hidden = true;
+      const relLabel = rel === "" ? "\u2014" : rel;
+      if (colls.length > 0) {
+        collsDiv.innerHTML = `<strong>Relation not set \u2014 collision detected:</strong> `
+          + `${la} ${relLabel} ${lb}<ul>`
+          + colls.map(s => `<li>${s}</li>`).join("") + "</ul>";
+        collsDiv.hidden = false;
+      } else {
+        const verb = rel === "" ? "unset" : "set";
+        let html = `<strong>Relation ${verb}:</strong> ${la} ${relLabel} ${lb}`;
+        if (adds.length > 0)
+          html += "<br><strong>Added to matrix:</strong><ul>"
+            + adds.map(s => `<li>${s}</li>`).join("") + "</ul>";
+        if (inferredAdds.length > 0)
+          html += "<br><strong>Inferred in closure:</strong><ul>"
+            + inferredAdds.map(s => `<li>${s}</li>`).join("") + "</ul>";
+        addsDiv.innerHTML = html; addsDiv.hidden = false;
+      }
+      panel.hidden = false;
+      panel._hideTimer = setTimeout(() => { panel.hidden = true; }, 8000);
     }
 
     function cellClass(rel) {
@@ -106,7 +151,11 @@
       thead.appendChild(headerRow);
       table.appendChild(thead);
 
-      // Body rows
+      // Decode URL params for the current aspect pair
+      const an1 = document.getElementById("selAn1").value;
+      const an2 = document.getElementById("selAn2").value;
+
+      // Body rows with dropdowns
       const tbody = document.createElement("tbody");
       data.cells.forEach((row, ri) => {
         const tr = document.createElement("tr");
@@ -114,10 +163,66 @@
         th.textContent = data.row_labels[ri];
         th.className = "vdiff-row-header";
         tr.appendChild(th);
-        row.forEach(rel => {
+        row.forEach((rel, ci) => {
           const td = document.createElement("td");
-          td.className = "vdiff-cell " + cellClass(rel);
-          td.textContent = rel === "" ? "\u2014" : rel;
+          const rowLbl = data.row_labels[ri];  // e.g. 'Δ(0,600)'
+          const colLbl = data.col_labels[ci];
+
+          // Parse 'Δ(a,b)' -> [a, b]
+          function parseLbl(lbl) {
+            const m = lbl.match(/\u0394\((.+),(.+)\)/);
+            return m ? [m[1].trim(), m[2].trim()] : ["*", "*"];
+          }
+          const [l1a, l1b] = parseLbl(rowLbl);
+          const [l2a, l2b] = parseLbl(colLbl);
+
+          // Determine current order relation from TRUE/FALSE pair
+          const rawRel  = rel;         // TRUE='⊒', FALSE='⋣', ''=undefined
+          const rawBack = data.cells[ci]?.[ri] ?? "";  // transpose entry
+          let currentOrder;
+          if (rawRel === TRUE_SYM && rawBack === FALSE_SYM) currentOrder = GT;
+          else if (rawRel === TRUE_SYM && rawBack === TRUE_SYM) currentOrder = DEQ;
+          else if (rawRel === TRUE_SYM) currentOrder = GTE;
+          else if (rawRel === FALSE_SYM && rawBack === TRUE_SYM) currentOrder = LT;
+          else if (rawBack === TRUE_SYM) currentOrder = LTE;
+          else currentOrder = "";
+
+          td.className = "vdiff-cell " + cellClass(rawRel);
+
+          const sel = document.createElement("select");
+          sel.className = "vdiff-select";
+          ORDER_OPTIONS.forEach(opt => {
+            const o = document.createElement("option");
+            o.value = opt.value; o.textContent = opt.label;
+            if (opt.value === currentOrder) o.selected = true;
+            sel.appendChild(o);
+          });
+
+          let currentOrderMemo = currentOrder;
+          sel.addEventListener("change", async () => {
+            const newOrder = sel.value;
+            const url = `/api/vdiff-matrix/${encodeURIComponent(an1)}/${encodeURIComponent(l1a)}/${encodeURIComponent(l1b)}/`
+                      + `${encodeURIComponent(an2)}/${encodeURIComponent(l2a)}/${encodeURIComponent(l2b)}`;
+            const res = await fetch(url, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ relation: newOrder })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (res.ok) {
+              currentOrderMemo = newOrder;
+              showInferencePanel(rowLbl, newOrder, colLbl,
+                json.adds || [], json.inferred_adds || [], []);
+              // Reload matrix to reflect any symmetry updates
+              await loadMatrix();
+            } else {
+              sel.value = currentOrderMemo;
+              showInferencePanel(rowLbl, newOrder, colLbl, [], [],
+                json.colls || [json.error] || []);
+            }
+          });
+
+          td.appendChild(sel);
           tr.appendChild(td);
         });
         tbody.appendChild(tr);

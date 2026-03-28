@@ -943,6 +943,90 @@ class EudoxaManager:
     def get_vdiff_relation(self, vd1: VDiff, vd2: VDiff) -> str:
         return get_vdiff_relation(self.vdiff_comparison_matrix, vd1, vd2)
     
+    def try_set_vdiff_order_relation(self,
+                                      vd1: VDiff, vd2: VDiff,
+                                      order_rel: str) -> Tuple:
+        """Validate and commit a vdiff order relation using a full VDCM staging copy.
+
+        order_rel must be one of: GT ('⊐'), GTE ('⊒'), DEQ ('≜'),
+                                   LTE ('⊑'), LT ('⊏'), UNDEFINED ('').
+
+        Mapping to VDCM TRUE/FALSE entries (via set_rel):
+          ⊐  →  vd1⊒vd2  AND  vd2⋣vd1
+          ⊒  →  vd1⊒vd2
+          ≜  →  vd1⊒vd2  AND  vd2⊒vd1  (and mirror pairs)
+          ⊑  →  vd2⊒vd1
+          ⊏  →  vd2⊒vd1  AND  vd1⋣vd2
+          —  →  unset all four VDCM entries for (vd1,vd2)
+
+        Flow (mirrors try_set_aspect_level_relation):
+          1. Deep-copy the full VDCM as staging area.
+          2. Apply set_rel to staging. Reject on immediate collision.
+          3. Recompute closure on staging. Reject on inferred collision.
+          4. If clean, commit set_rel to the real VDCM.
+             Return (adds, [], inferred_adds).
+        """
+        import copy
+
+        # Decompose vd1/vd2 into (aspect, la, lb) for set_rel
+        an1, l1a, l1b = vd1.aspect_name, vd1.from_level, vd1.to_level
+        an2, l2a, l2b = vd2.aspect_name, vd2.from_level, vd2.to_level
+
+        origin = ['SETVDREL', [repr(vd1), order_rel, repr(vd2)]]
+
+        # ── Step 1: deep-copy the VDCM ──────────────────────────
+        staged_matrix = copy.deepcopy(self.vdiff_comparison_matrix)
+
+        # ── Step 2: apply to staging ─────────────────────────────
+        staged_adds, staged_colls = [], []
+        original_matrix = self.vdiff_comparison_matrix
+        self.vdiff_comparison_matrix = staged_matrix
+
+        if order_rel == UNDEFINED:
+            # Unset all four entries for this vdiff pair
+            for va, vb in [(vd1, vd2), (vd2, vd1)]:
+                app_ac(origin,
+                       set_vdiff_relation(staged_matrix, va, vb, UNDEFINED),
+                       staged_adds, staged_colls)
+                app_ac(origin,
+                       set_vdiff_relation(staged_matrix, vb, va, UNDEFINED),
+                       staged_adds, staged_colls)
+        else:
+            s_adds, s_colls = self.set_rel(an1, l1a, l1b, an2, l2a, l2b, order_rel)
+            staged_adds.extend(s_adds)
+            staged_colls.extend(s_colls)
+
+        self.vdiff_comparison_matrix = original_matrix
+
+        # ── Step 3: immediate collision — reject ─────────────────
+        if staged_colls:
+            return ([], staged_colls, [])
+
+        # ── Step 4: recompute closure on staging, check inferred ─
+        self.vdiff_comparison_matrix = staged_matrix
+        _, inferred_adds, inferred_colls = self.closure()
+        self.vdiff_comparison_matrix = original_matrix
+
+        if inferred_colls:
+            return ([], inferred_colls, [])
+
+        # ── Step 5: clean — commit to the real VDCM ─────────────
+        adds, colls = [], []
+        if order_rel == UNDEFINED:
+            for va, vb in [(vd1, vd2), (vd2, vd1)]:
+                app_ac(origin,
+                       set_vdiff_relation(original_matrix, va, vb, UNDEFINED),
+                       adds, colls)
+                app_ac(origin,
+                       set_vdiff_relation(original_matrix, vb, va, UNDEFINED),
+                       adds, colls)
+        else:
+            c_adds, c_colls = self.set_rel(an1, l1a, l1b, an2, l2a, l2b, order_rel)
+            adds.extend(c_adds)
+            colls.extend(c_colls)
+
+        return (adds, [], inferred_adds)
+
     def set_vdiff_relation(self, vd1: VDiff, vd2: VDiff, new_rel: str) -> Tuple:
         return set_vdiff_relation(self.vdiff_comparison_matrix, vd1, vd2, new_rel)
 

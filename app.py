@@ -573,6 +573,71 @@ def export_project():
         return {"error": f"Export failed: {e}"}, 500
 
 
+@app.patch("/api/vdiff-matrix/<an1>/<l1a>/<l1b>/<an2>/<l2a>/<l2b>")
+def patch_vdiff_relation(an1, l1a, l1b, an2, l2a, l2b):
+    """Set or unset the order relation between two vdiffs.
+    Body: { "relation": one of ⊐ ⊒ ≜ ⊑ ⊏ or '' }
+    """
+    mgr  = load_manager_or_400()
+    data = request.get_json(force=True)
+    order_rel = data.get("relation", "")
+
+    if order_rel not in (eudoxa.GT, eudoxa.GTE, eudoxa.DEQ,
+                         eudoxa.LTE, eudoxa.LT, eudoxa.UNDEFINED):
+        return {"error": f"Invalid relation: {order_rel!r}"}, 400
+
+    for asp, la, lb in [(an1, l1a, l1b), (an2, l2a, l2b)]:
+        if asp not in mgr.aspects:
+            return {"error": f"Aspect '{asp}' not found"}, 404
+        if la != "*" and la not in mgr.aspects[asp].levels:
+            return {"error": f"Level '{la}' not found in aspect '{asp}'"}, 404
+        if lb != "*" and lb not in mgr.aspects[asp].levels:
+            return {"error": f"Level '{lb}' not found in aspect '{asp}'"}, 404
+
+    def make_vd(asp, la, lb):
+        return eudoxa.VDiff(asp, None, None) if (la == "*" and lb == "*") \
+               else eudoxa.VDiff(asp, la, lb)
+
+    vd1 = make_vd(an1, l1a, l1b)
+    vd2 = make_vd(an2, l2a, l2b)
+
+    try:
+        adds, colls, inferred_adds = mgr.try_set_vdiff_order_relation(
+            vd1, vd2, order_rel
+        )
+    except Exception as e:
+        logger.exception("Failed to set vdiff relation")
+        return {"error": str(e)}, 500
+
+    def _fmt_tokens(items):
+        return " ".join(repr(x) if hasattr(x, 'aspect_name')
+                         else (str(x) if x else "\u2014") for x in items)
+
+    def _fmt_entry(entry):
+        origin_type, origin_detail, result_items = entry
+        if origin_type == 'SETVDREL':
+            vd1_r, rel, vd2_r = origin_detail
+            rel_label = rel if rel else "\u2014"
+            origin_str = f"Set {vd1_r} {rel_label} {vd2_r}"
+        else:
+            origin_str = f"{origin_type}({_fmt_tokens(origin_detail)})"
+        return f"{origin_str} \u2192 {_fmt_tokens(result_items)}"
+
+    def _fmt_coll(coll):
+        vd1_c, old_rel, vd2_c, new_rel_c = coll
+        return (f"{repr(vd1_c)} {new_rel_c or '\u2014'} {repr(vd2_c)} "
+                f"conflicts with existing {repr(vd1_c)} {old_rel} {repr(vd2_c)}")
+
+    if colls:
+        return {"colls": [_fmt_coll(c) for c in colls]}, 409
+
+    save_manager(mgr)
+    return {
+        "adds":          [_fmt_entry(a) for a in adds],
+        "inferred_adds": [_fmt_entry(a) for a in inferred_adds]
+    }, 200
+
+
 @app.get("/api/dominance-graph")
 def get_dominance_graph():
     """Return confirmed and possible dominance edges, plus node completeness.
