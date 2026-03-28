@@ -23,6 +23,7 @@
       <strong>Current project:</strong>
       <span class="muted">{{ project_name }}</span>
       <button id="btnManage">Manage project</button>
+      <a href="/api/export-project" class="header-link-button">Export project</a>
     </p>
 
     <!-- Manage panel (hidden until toggled) -->
@@ -309,6 +310,11 @@
           errs.forEach(e => { html += `<li><em>${asp}:</em> ${e}</li>`; });
         }
         html += "</ul>";
+      }
+
+      // VDCM additions
+      if (result.vdcm_adds > 0) {
+        html += `<p><strong>Value difference relations imported:</strong> ${result.vdcm_adds}</p>`;
       }
 
       // Closure collisions

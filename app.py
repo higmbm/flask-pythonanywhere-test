@@ -548,6 +548,31 @@ def vdiff_matrix_html():
     return render_template("vdiff_matrix.html", aspect_names=aspect_names)
 
 
+@app.get("/api/export-project")
+def export_project():
+    """Export the full project as a downloadable Excel workbook."""
+    import io
+    from flask import send_file
+    mgr = load_manager_or_400()
+    try:
+        wb  = mgr.export_project_to_workbook()
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        project_name = session.get("project_name", "project")
+        filename = f"{project_name}.xlsx"
+        return send_file(
+            buf,
+            mimetype="application/vnd.openxmlformats-officedocument"
+                     ".spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.exception("Failed to export project")
+        return {"error": f"Export failed: {e}"}, 500
+
+
 @app.get("/api/dominance-graph")
 def get_dominance_graph():
     """Return confirmed and possible dominance edges, plus node completeness.

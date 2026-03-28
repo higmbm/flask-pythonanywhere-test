@@ -1151,6 +1151,34 @@ class EudoxaManager:
         wb.save(filename)
         return n_levels
 
+    def export_project_to_workbook(self):
+        """Export the full project to a new openpyxl Workbook.
+        Writes one |ASP| tab per aspect (levels + relations),
+        one |CONS| tab, and one |VDCM| tab.
+        Returns the workbook object.
+        """
+        import openpyxl
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)  # remove the default empty sheet
+
+        # One |ASP| tab per aspect
+        for asp_name, aspect in self.aspects.items():
+            ws = wb.create_sheet(title=ASP + asp_name)
+            self.export_aspect_to_worksheet(aspect, ws)
+            self.export_aspect_level_relations_to_worksheet(aspect, ws)
+
+        # |CONS| tab
+        ws_cons = wb.create_sheet(title=CONS)
+        self.export_consequences_to_worksheet(ws_cons)
+
+        # |VDCM| tab
+        ws_vdcm = wb.create_sheet(title=VDCM)
+        self.export_vdiff_comparison_matrix_to_worksheet(
+            self.vdiff_comparison_matrix, ws_vdcm
+        )
+
+        return wb
+
     def export_aspect_level_relations_to_excel(self, aspect_name: str, filename: str):
         import openpyxl
         title = ASP + aspect_name
@@ -1230,32 +1258,43 @@ class EudoxaManager:
                 col_index +=1
             row_index += 1
 
+    def _vd_label(self, vd):
+        """Return the label for a VDiff used in Excel: '(*,*)' or '(0,600)'."""
+        if vd.natural_zero():
+            return "(*,*)"
+        return f"({vd.from_level},{vd.to_level})"
+
+    def _vd_key(self, vd):
+        """Return the dict key tuple for a VDiff."""
+        return ZDIFF_TUPLE if vd.natural_zero() \
+               else (str(vd.from_level), str(vd.to_level))
+
     def export_vdiff_comparison_matrix_to_worksheet(self, vdcm, ws):
-        ws.cell(row=3, column=3).value="Δ\Δ"
-        # Rows 2-3: column headers
+        """Write the full vdiff comparison matrix to a worksheet."""
+        ordered = [(an, vd) for an, asp in self.aspects.items() for vd in asp.vdiffs]
+
+        # Corner cell
+        ws.cell(row=3, column=3).value = "\u0394\\\u0394"
+
+        # Row 2+3: column headers
         col_index = 4
-        for an in self.aspects:
-            ws.cell(row=2, column=col_index).value=an
-            aspect = self.aspects[an]
-            for vd in aspect.vdiffs:
-                if vd.natural_zero():
-                    col_header = ZDIFF_STR
-                else:
-                    col_header = "(" + str(vd.from_level) + "," + str(vd.to_level) + ")"
-                ws.cell(row=3, column=col_index).value=col_header
+        for an, asp in self.aspects.items():
+            ws.cell(row=2, column=col_index).value = an
+            for vd in asp.vdiffs:
+                ws.cell(row=3, column=col_index).value = self._vd_label(vd)
                 col_index += 1
-        # Row 4+: row headers and values
-        row_index = 4
-        for an in self.aspects:
-            col_index = 2
-            ws.cell(row=row_index, column=col_index).value=an
-            aspect = self.aspects[an]
-            for vd in aspect.vdiffs:
-                col_index = 3
-                row_header = "(" + str(vd.from_level) + "," + str(vd.to_level) + ")"
-                ws.cell(row=row_index, column=col_index).value=row_header
-                row_index += 1
-        
+
+        # Row 4+: row headers and cell values
+        ordered = [(an, vd) for an, asp in self.aspects.items() for vd in asp.vdiffs]
+        for row_index, (an1, vd1) in enumerate(ordered, start=4):
+            ws.cell(row=row_index, column=2).value = an1
+            ws.cell(row=row_index, column=3).value = self._vd_label(vd1)
+            for col_offset, (an2, vd2) in enumerate(ordered):
+                rel = self.vdiff_comparison_matrix.get((an1, an2), {}).get(
+                    (self._vd_key(vd1), self._vd_key(vd2)), UNDEFINED
+                )
+                ws.cell(row=row_index, column=4 + col_offset).value = rel
+
     def export_vdiff_comparison_matrix_to_excel(self, filename: str):
         import openpyxl
         title = VDCM
@@ -1272,6 +1311,86 @@ class EudoxaManager:
         self.export_vdiff_comparison_matrix_to_worksheet(self.vdiff_comparison_matrix, ws)
         wb.save(filename)
                 
+    def import_vdiff_comparison_matrix_from_worksheet(self, ws) -> dict:
+        """Import vdiff relations from a |VDCM| worksheet.
+
+        Layout matches export_vdiff_comparison_matrix_to_worksheet:
+          Row 2: aspect name column headers
+          Row 3: vdiff label column headers ('(*,*)' or '(0,600)')
+          Col B: aspect name row headers
+          Col C: vdiff label row headers
+          Cells D4+: relation values (TRUE='⋒', FALSE='⋓', or empty)
+
+        Returns {"adds": [...], "collisions": [...]}.
+        """
+        def parse_label(lbl):
+            lbl = lbl.strip().strip("()")
+            parts = lbl.split(",", 1)
+            if len(parts) != 2:
+                return None
+            a, b = parts[0].strip(), parts[1].strip()
+            # Accept (*,*) and legacy (None,None) as zero-diff
+            if (a == "*" and b == "*") or (a == "None" and b == "None"):
+                return ZDIFF_TUPLE
+            return (a, b)
+
+        # Parse column headers (row 3, from col D)
+        col_headers = []   # [(aspect_name, vd_key_tuple), ...]
+        current_asp = None
+        col = 4
+        while True:
+            asp_val = ws.cell(row=2, column=col).value
+            vd_val  = ws.cell(row=3, column=col).value
+            if asp_val is None and vd_val is None:
+                break
+            if asp_val is not None:
+                current_asp = str(asp_val).strip()
+            if vd_val is not None and current_asp is not None:
+                d = parse_label(str(vd_val))
+                if d is not None:
+                    col_headers.append((current_asp, d))
+            col += 1
+
+        adds       = []
+        collisions = []
+
+        # Parse data rows (row 4 onwards)
+        row = 4
+        while True:
+            row_asp = ws.cell(row=row, column=2).value
+            row_lbl = ws.cell(row=row, column=3).value
+            if row_asp is None and row_lbl is None:
+                break
+            if row_asp is None or row_lbl is None:
+                row += 1
+                continue
+            an1 = str(row_asp).strip()
+            d1  = parse_label(str(row_lbl).strip())
+            if d1 is None or an1 not in self.aspects:
+                row += 1
+                continue
+            vd1 = VDiff(an1, None, None) if d1 == ZDIFF_TUPLE \
+                  else VDiff(an1, d1[0], d1[1])
+            for col_offset, (an2, d2) in enumerate(col_headers):
+                if an2 not in self.aspects:
+                    continue
+                cell_val = ws.cell(row=row, column=4 + col_offset).value
+                if cell_val is None or str(cell_val).strip() == "":
+                    continue
+                new_rel = str(cell_val).strip()
+                if new_rel not in (TRUE, FALSE):
+                    continue
+                vd2 = VDiff(an2, None, None) if d2 == ZDIFF_TUPLE \
+                      else VDiff(an2, d2[0], d2[1])
+                add, coll = set_vdiff_relation(
+                    self.vdiff_comparison_matrix, vd1, vd2, new_rel
+                )
+                if add:  adds.append(add)
+                if coll: collisions.append(coll)
+            row += 1
+
+        return {"adds": adds, "collisions": collisions}
+
     def export_consequences_to_worksheet(self, ws):
         # Row 1: headers, Row 2: data types
         for col_index, aspect_name in enumerate(self.aspects.keys(), start=2):
@@ -1324,6 +1443,7 @@ class EudoxaManager:
             "imported_aspects":     [],
             "aspect_errors":        {},
             "closure_collisions":   [],
+            "vdcm_adds":            0,
             "imported_consequences": [],
             "consequence_errors":   [],
             "missing_cons_sheet":   False,
@@ -1375,6 +1495,22 @@ class EudoxaManager:
 
         if result["aspect_errors"]:
             return result
+
+        # ── Step 1.5: import |VDCM| tab if present ────────────────
+        vdcm_sheet = next((n for n in wb.sheetnames if n == VDCM), None)
+        if vdcm_sheet is not None:
+            vdcm_result = tmp.import_vdiff_comparison_matrix_from_worksheet(
+                wb[vdcm_sheet]
+            )
+            result["vdcm_adds"] = len(vdcm_result["adds"])
+            if vdcm_result["collisions"]:
+                for coll in vdcm_result["collisions"]:
+                    vd1, old_rel, vd2, new_rel = coll
+                    result["closure_collisions"].append(
+                        f"|VDCM| collision: attempted {repr(vd1)} {new_rel} {repr(vd2)} "
+                        f"conflicts with existing {repr(vd1)} {old_rel} {repr(vd2)}"
+                    )
+                return result
 
         # ── Step 2: closure check ───────────────────────────────────
         _, _, closure_colls = tmp.closure()
