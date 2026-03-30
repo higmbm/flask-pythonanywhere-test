@@ -141,11 +141,28 @@ td.editable-desc:empty::before {
   padding: 0.25rem 0.55rem;
   vertical-align: middle;
 }
+/* ── Link styled as a button ────────────────────────────── */
+.header-link-button {
+  padding: 0.45rem 0.8rem;
+  font-size: 1rem;
+  border: 1px solid #999;
+  border-radius: 6px;
+  background: #f6f6f6;
+  color: #1a1a1a;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.header-link-button:hover {
+  background: #ebebeb;
+}
+
 /* ── Site navigation bar ─────────────────────────────────── */
 .site-nav {
   font-size: 0.85rem;
   margin-bottom: 1rem;
   color: #555;
+  line-height: 1.6;
 }
 
 .site-nav a {
@@ -157,6 +174,18 @@ td.editable-desc:empty::before {
   text-decoration: underline;
 }
 
+.site-nav a.site-nav-current {
+  color: #333;
+  font-weight: 600;
+  text-decoration: none;
+  pointer-events: none;
+}
+
 .site-nav-sep {
   color: #aaa;
+}
+
+.site-nav-project {
+  font-weight: 600;
+  color: #1a1a2e;
 }

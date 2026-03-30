@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/common.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/index.css') }}">
   <script src="{{ url_for('static', filename='common.js') }}"></script>
+  <script src="{{ url_for('static', filename='nav.js') }}" defer></script>
 </head>
 <body>
 
@@ -19,18 +20,19 @@
   {% if project_name %}
 
     <!-- ── Project header ───────────────────────────────────── -->
-    <p class="project-header">
-      <strong>Current project:</strong>
-      <span class="muted">{{ project_name }}</span>
+    <h1 class="project-controls">
+      {{ project_name }}
       <button id="btnManage">Manage project</button>
       <a href="/api/export-project" class="header-link-button">Export project</a>
-    </p>
+    </h1>
 
     <!-- Manage panel (hidden until toggled) -->
     <div id="managePanel" class="action-panel" hidden>
-      <label for="inputProjectName">New name:</label>
+      <label for="inputProjectName">Name:</label>
       <input id="inputProjectName" type="text" value="{{ project_name }}">
-      <button id="btnRename">Rename</button>
+      <label for="inputAuthor">Author:</label>
+      <input id="inputAuthor" type="text" value="{{ author }}">
+      <button id="btnRename">Save</button>
       <button id="btnDelete" class="danger">Delete</button>
     </div>
 
@@ -47,35 +49,11 @@
         <thead>
           <tr>
             <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
           </tr>
         </thead>
         <tbody id="aspectsContainer">
-          <tr><td colspan="3" class="muted">Loading...</td></tr>
+          <tr><td class="muted">Loading...</td></tr>
         </tbody>
-        <tfoot class="add-aspect-foot">
-          <tr class="add-aspect-inputs">
-            <td><input id="inputAspectName" type="text" placeholder="e.g. Economy"></td>
-            <td>
-              <select id="inputAspectType">
-                <option value="str">str</option>
-                <option value="int">int</option>
-                <option value="float">float</option>
-              </select>
-            </td>
-            <td><input id="inputAspectDesc" type="text" placeholder="Optional"></td>
-          </tr>
-          <tr class="add-aspect-action">
-            <td colspan="3">
-              <div class="consequence-action-row">
-                <span class="action-spacer"></span>
-                <button id="btnAddAspect" class="primary">Add aspect</button>
-                <button id="btnClearAspectForm">Clear</button>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
       </table>
     </section>
 
@@ -150,10 +128,15 @@
   {% else %}
 
     <!-- ── No project: create / import form ─────────────────── -->
+    <h1>EUDOXA <span style="font-size:0.7em;font-weight:400;color:#888;">0.1</span></h1>
     <div class="action-panel">
       <label for="inputProjectName">Project name:</label>
-      <input id="inputProjectName" type="text" placeholder="Enter project name">
+      <input id="inputProjectName" type="text" placeholder="Required">
+      <label for="inputAuthor">Author:</label>
+      <input id="inputAuthor" type="text" placeholder="Optional">
       <button id="btnCreate" class="primary">Create empty project</button>
+    </div>
+    <div class="action-panel" style="margin-top:0.8rem;">
       <button id="btnImportProject">Import project from Excel</button>
       <input id="fileImportProject" type="file" accept=".xlsx" hidden>
     </div>
@@ -186,11 +169,12 @@
     if (btnRename) {
       btnRename.addEventListener("click", async () => {
         const name = document.getElementById("inputProjectName").value.trim();
+        const author = (document.getElementById("inputAuthor")?.value || "").trim();
         if (!name) { alert("Project name must be non-empty."); return; }
         const res = await fetch("/api/project", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project_name: name })
+          body: JSON.stringify({ project_name: name, author })
         });
         if (res.ok) { location.reload(); }
         else {
@@ -227,8 +211,6 @@
 
     if (btnImportProject) {
       btnImportProject.addEventListener("click", () => {
-        const name = document.getElementById("inputProjectName").value.trim();
-        if (!name) { alert("Project name must be non-empty."); return; }
         fileImportProject.click();
       });
     }
@@ -239,14 +221,15 @@
         if (!file) return;
         fileImportProject.value = "";
 
-        const name = document.getElementById("inputProjectName").value.trim();
-        if (!name) { alert("Project name must be non-empty."); return; }
+        // Name from field is optional — |PROJ| tab may supply it
+        const name = (document.getElementById("inputProjectName")?.value || "").trim();
+        const author = (document.getElementById("inputAuthor")?.value || "").trim();
 
-        // Step 1: create the project
+        // Step 1: create the project (placeholder name if none given)
         const createRes = await fetch("/api/project", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project_name: name })
+          body: JSON.stringify({ project_name: name || "Importing…", author })
         });
         if (!createRes.ok) {
           let msg = `${createRes.status} ${createRes.statusText}`;
@@ -397,11 +380,12 @@
     if (btnCreate) {
       btnCreate.addEventListener("click", async () => {
         const name = document.getElementById("inputProjectName").value.trim();
+        const author = (document.getElementById("inputAuthor")?.value || "").trim();
         if (!name) { alert("Project name must be non-empty."); return; }
         const res = await fetch("/api/project", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project_name: name })
+          body: JSON.stringify({ project_name: name, author })
         });
         if (res.ok) { location.reload(); }
         else {
@@ -432,35 +416,20 @@
         levels:      row[3] ? row[3].split(", ").filter(Boolean) : []
       }));
 
-      // Render aspects tbody rows
+      // Render aspects tbody — name column only, linked
       const tbody = document.getElementById("aspectsContainer");
       if (aspectData.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='3' class='muted'>No aspects defined yet.</td></tr>";
+        tbody.innerHTML = "<tr><td class='muted'>No aspects defined yet.</td></tr>";
       } else {
         tbody.innerHTML = "";
-        aspectData.forEach(({ name, dtype, description }) => {
+        aspectData.forEach(({ name }) => {
           const tr = document.createElement("tr");
-
-          // Name cell — links to aspect detail page
           const nameTd = document.createElement("td");
           const nameLink = document.createElement("a");
           nameLink.href = `/aspects/${encodeURIComponent(name)}`;
           nameLink.textContent = name;
-          nameLink.className = "aspect-name-link";
           nameTd.appendChild(nameLink);
           tr.appendChild(nameTd);
-
-          // Type cell
-          const typeTd = document.createElement("td");
-          typeTd.textContent = dtype;
-          tr.appendChild(typeTd);
-
-          // Description cell — inline editable
-          const descTd = document.createElement("td");
-          descTd.textContent = description;
-          makeDescriptionCellEditable(descTd, name);
-          tr.appendChild(descTd);
-
           tbody.appendChild(tr);
         });
       }

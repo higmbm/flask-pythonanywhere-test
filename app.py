@@ -77,7 +77,9 @@ def get_constants():
 
 @app.get("/")
 def index():
-    return render_template("index.html", project_name=session.get("project_name"))
+    return render_template("index.html",
+                           project_name=session.get("project_name"),
+                           author=session.get("author", ""))
 
 # -----------------------------------------------------------
 #  REST: PROJECT
@@ -98,6 +100,9 @@ def create_project():
     mgr = EudoxaManager()
 
     session["project_name"] = name
+    author = (data.get("author") or "").strip()
+    if author:
+        session["author"] = author
     save_manager(mgr)
 
     return {"message": "Project created", "project_name": name}, 201
@@ -115,6 +120,11 @@ def rename_project():
         return {"error": "Project name must be non-empty."}, 400
 
     session["project_name"] = name
+    author = (data.get("author") or "").strip()
+    if author:
+        session["author"] = author
+    elif "author" in data:
+        session.pop("author", None)
 
     return {"message": "Project renamed", "project_name": name}, 200
 

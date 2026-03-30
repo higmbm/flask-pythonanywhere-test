@@ -7,12 +7,15 @@
   display: none !important;
 }
 
-/* ── Project header ────────────────────────────────────────── */
-.project-header {
+/* ── Project controls ──────────────────────────────────────── */
+.project-controls {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
 }
 
 /* ── Action panel (manage project / create project) ─────────── */
@@ -45,20 +48,6 @@
 }
 
 /* A plain <a> styled to look like a button, used in section headers */
-.header-link-button {
-  padding: 0.45rem 0.8rem;
-  font-size: 1rem;
-  border: 1px solid #999;
-  border-radius: 6px;
-  background: #f6f6f6;
-  color: #1a1a1a;
-  text-decoration: none;
-}
-
-.header-link-button:hover {
-  background: #ebebeb;
-}
-
 /* ── Add-aspect tfoot row ───────────────────────────────────── */
 .add-aspect-foot tr.add-aspect-inputs td {
   background: #f0f4ff;
