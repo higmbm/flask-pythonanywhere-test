@@ -14,25 +14,52 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------
 app.secret_key = os.getenv("SECRET_KEY") or "dev-secret-change-me"
 
+# Store manager data server-side to avoid Flask's 4 KB cookie limit.
+_STORE_DIR = os.getenv("MANAGER_STORE_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".manager_store"
+)
+os.makedirs(_STORE_DIR, exist_ok=True)
+
 
 # -----------------------------------------------------------
 #  HELPERS
 # -----------------------------------------------------------
+def _store_path(sid: str) -> str:
+    """Return the file path for a session's manager store."""
+    safe = "".join(c for c in sid if c in "0123456789abcdef")
+    return os.path.join(_STORE_DIR, safe + ".json")
+
+
+def _get_sid() -> str:
+    """Return the current session's store ID, creating one if needed."""
+    import uuid
+    if "sid" not in session:
+        session["sid"] = uuid.uuid4().hex
+    return session["sid"]
+
+
 def load_manager_or_400():
-    """Load EudoxaManager from the session, or abort 400 if no active project."""
-    serialized_mgr = session.get("manager")
-    if not serialized_mgr:
+    """Load EudoxaManager from the server-side store, or abort 400."""
+    import json
+    sid = session.get("sid")
+    if not sid:
         abort(400, description="No active project")
     try:
-        return EudoxaManager.from_dict(serialized_mgr)
+        with open(_store_path(sid), "r", encoding="utf-8") as f:
+            return EudoxaManager.from_dict(json.load(f))
+    except FileNotFoundError:
+        abort(400, description="No active project")
     except Exception:
-        logger.exception("Failed to deserialize EudoxaManager from session")
+        logger.exception("Failed to deserialize EudoxaManager")
         abort(400, description="Failed to load project data")
 
 
 def save_manager(mgr: EudoxaManager):
-    """Save the manager to the session."""
-    session["manager"] = mgr.to_dict()
+    """Persist the manager to the server-side store."""
+    import json
+    sid = _get_sid()
+    with open(_store_path(sid), "w", encoding="utf-8") as f:
+        json.dump(mgr.to_dict(), f, ensure_ascii=False)
 
 
 @app.after_request
@@ -99,6 +126,7 @@ def create_project():
 
     mgr = EudoxaManager()
 
+    _get_sid()  # allocate store ID before first save
     session["project_name"] = name
     author = (data.get("author") or "").strip()
     if author:
@@ -146,8 +174,11 @@ def get_project():
 @app.delete("/api/project")
 def delete_project():
     """Delete the project and manager from the session."""
-    session.pop("project_name", None)
-    session.pop("manager", None)
+    sid = session.get("sid")
+    session.clear()
+    if sid:
+        try: os.remove(_store_path(sid))
+        except FileNotFoundError: pass
     return "", 204
 
 
