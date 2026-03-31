@@ -20,6 +20,28 @@ _STORE_DIR = os.getenv("MANAGER_STORE_DIR") or os.path.join(
 )
 os.makedirs(_STORE_DIR, exist_ok=True)
 
+# Option B: delete store files older than this many days on startup.
+_STORE_MAX_AGE_DAYS = int(os.getenv("MANAGER_STORE_MAX_AGE_DAYS") or "7")
+
+def _cleanup_old_store_files():
+    import time
+    cutoff = time.time() - _STORE_MAX_AGE_DAYS * 86400
+    removed = 0
+    for fname in os.listdir(_STORE_DIR):
+        if not fname.endswith(".json"):
+            continue
+        path = os.path.join(_STORE_DIR, fname)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.remove(path)
+                removed += 1
+        except OSError:
+            pass
+    if removed:
+        logger.info(f"Cleaned up {removed} expired manager store file(s)")
+
+_cleanup_old_store_files()
+
 
 # -----------------------------------------------------------
 #  HELPERS
@@ -48,6 +70,8 @@ def load_manager_or_400():
         with open(_store_path(sid), "r", encoding="utf-8") as f:
             return EudoxaManager.from_dict(json.load(f))
     except FileNotFoundError:
+        # Option C: store file gone (expired/deleted) — clear the stale session
+        session.clear()
         abort(400, description="No active project")
     except Exception:
         logger.exception("Failed to deserialize EudoxaManager")
