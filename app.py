@@ -569,8 +569,8 @@ def get_vdiff_matrix(an1, an2):
         if raw_fwd == F:                   return eudoxa.FALSE
         return eudoxa.UNDEFINED
 
-    row_vdiffs = list(mgr.aspects[an1].vdiffs)
-    col_vdiffs = list(mgr.aspects[an2].vdiffs)
+    row_vdiffs = mgr._sorted_vdiffs(mgr.aspects[an1])
+    col_vdiffs = mgr._sorted_vdiffs(mgr.aspects[an2])
     row_labels = [repr(v) for v in row_vdiffs]
     col_labels  = [repr(v) for v in col_vdiffs]
 
