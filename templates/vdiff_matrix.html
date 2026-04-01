@@ -14,25 +14,14 @@
   <h1>Value difference relations</h1>
 
   <section class="section">
-    <div class="section-header">
-      <h2>Select aspect pair</h2>
-    </div>
     <div class="vdiff-selectors">
-      <label>Row aspect:
-        <select id="selAn1">
-          {% for name in aspect_names %}
-          <option value="{{ name }}">{{ name }}</option>
-          {% endfor %}
+      <label>Aspect pair:
+        <select id="selPair">
+          {% for a1 in aspect_names %}{% for a2 in aspect_names %}
+          <option value="{{ a1 }}|{{ a2 }}">{{ a1 }}-{{ a2 }}</option>
+          {% endfor %}{% endfor %}
         </select>
       </label>
-      <label>Column aspect:
-        <select id="selAn2">
-          {% for name in aspect_names %}
-          <option value="{{ name }}">{{ name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <button id="btnLoad" class="primary">Show matrix</button>
     </div>
   </section>
 
@@ -50,14 +39,14 @@
   <script>
     const ASPECT_NAMES = {{ aspect_names | tojson }};
 
-    document.getElementById("btnLoad").addEventListener("click", loadMatrix);
+    const selPair = document.getElementById("selPair");
+    selPair.addEventListener("change", loadMatrix);
 
     // Auto-load on page open with first aspect pair
     if (ASPECT_NAMES.length > 0) loadMatrix();
 
     async function loadMatrix() {
-      const an1 = document.getElementById("selAn1").value;
-      const an2 = document.getElementById("selAn2").value;
+      const [an1, an2] = selPair.value.split("|");
 
       const res = await fetch(
         `/api/vdiff-matrix/${encodeURIComponent(an1)}/${encodeURIComponent(an2)}`
@@ -160,8 +149,7 @@
       table.appendChild(thead);
 
       // Decode URL params for the current aspect pair
-      const an1 = document.getElementById("selAn1").value;
-      const an2 = document.getElementById("selAn2").value;
+      const [an1, an2] = document.getElementById("selPair").value.split("|");
 
       // Body rows
       const tbody = document.createElement("tbody");
