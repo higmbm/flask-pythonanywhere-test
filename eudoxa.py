@@ -1391,9 +1391,18 @@ class EudoxaManager:
             return ZDIFF_TUPLE
         return (vd.from_level, vd.to_level)
 
+    def _sorted_vdiffs(self, asp):
+        """Return asp.vdiffs sorted: zero-diff first, then (from, to) pairs
+        sorted by (level_index[from], level_index[to])."""
+        level_order = {l: i for i, l in enumerate(asp.levels.keys())}
+        zero = [vd for vd in asp.vdiffs if vd.natural_zero()]
+        rest = [vd for vd in asp.vdiffs if not vd.natural_zero()]
+        rest.sort(key=lambda vd: (level_order.get(vd.from_level, 0),
+                                  level_order.get(vd.to_level, 0)))
+        return zero + rest
+
     def export_vdiff_comparison_matrix_to_worksheet(self, vdcm, ws):
         """Write the full vdiff comparison matrix to a worksheet."""
-        ordered = [(an, vd) for an, asp in self.aspects.items() for vd in asp.vdiffs]
 
         # Corner cell
         ws.cell(row=3, column=3).value = f"{DELTA}\\{DELTA}"
@@ -1402,12 +1411,13 @@ class EudoxaManager:
         col_index = 4
         for an, asp in self.aspects.items():
             ws.cell(row=2, column=col_index).value = an
-            for vd in asp.vdiffs:
+            for vd in self._sorted_vdiffs(asp):
                 ws.cell(row=3, column=col_index).value = self._vd_label(vd)
                 col_index += 1
 
         # Row 4+: row headers and cell values
-        ordered = [(an, vd) for an, asp in self.aspects.items() for vd in asp.vdiffs]
+        ordered = [(an, vd) for an, asp in self.aspects.items()
+                   for vd in self._sorted_vdiffs(asp)]
         prev_an1 = None
         for row_index, (an1, vd1) in enumerate(ordered, start=4):
             if an1 != prev_an1:
