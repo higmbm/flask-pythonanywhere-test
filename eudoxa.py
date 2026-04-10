@@ -1114,14 +1114,14 @@ class EudoxaManager:
                         an3 = ef.aspect_name
                         rel_cd_ef = get_vdiff_relation(closure, cd, ef)
                         if (an2 == an3): # Same aspect? Check difference property
-                            if rel_cd_ef == TRUE: # cdRef => ceRdf
+                            if rel_cd_ef == TRUE: # cd⊒ef => ce⊒df
                                 c, d = cd.from_level, cd.to_level
                                 e, f = ef.from_level, ef.to_level
                                 ce = VDiff(an2, c, e)
                                 df = VDiff(an2, d, f)
                                 origin = ['DiffP', [cd, rel_cd_ef, ef]]
                                 app_ac(origin, set_vdiff_relation(closure, ce, df, TRUE), adds, colls)
-                            elif rel_cd_ef == FALSE: # cdSef => fdSec
+                            elif rel_cd_ef == FALSE: # cd⋣ef => fd⋣ec
                                 c, d = cd.from_level, cd.to_level
                                 e, f = ef.from_level, ef.to_level
                                 fd = VDiff(an2, f, d)
@@ -1131,45 +1131,42 @@ class EudoxaManager:
                         if colls: # A collision has occurred — abort
                             return (closure, adds, colls)                            
                         rel_ab_cd = get_vdiff_relation(closure, ab, cd)
-                        if rel_ab_cd == TRUE: # abRcd
+                        if rel_ab_cd == TRUE: # ab⊒cd
                             rel_cd_ef = get_vdiff_relation(closure, cd, ef)
-                            if rel_cd_ef == TRUE: # abRcd & cdRef ==> abRef
+                            if rel_cd_ef == TRUE: # ab⊒cd & cd⊒ef ==> ab⊒ef
                                 origin = ['TransP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
                                 app_ac(origin, set_vdiff_relation(closure, ab, ef, TRUE), adds, colls)
-                                if ef.natural_zero(): # abRcd & cdRxx ==> dcRba
+                                if ef.natural_zero(): # ab⊒cd & cd⊒xx ==> dc⊒ba
                                     ba = ab.inv()
                                     dc = cd.inv()
-                                    origin = ['InvP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
+                                    origin = ['InvP_R', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
                                     app_ac(origin, set_vdiff_relation(closure, dc, ba, TRUE), adds, colls)                            
-                            elif rel_cd_ef == FALSE: # abRcd & cdSef
+                            elif rel_cd_ef == FALSE: # ab⊒cd & cd⋣ef
                                 rel_cd_ab = get_vdiff_relation(closure, cd, ab)
-                                if (rel_cd_ab == TRUE): # ab DEQ cdSef ==> abSef 
-                                    origin = ['TransP2', [ab, DEQ, cd, FALSE, ef]]
+                                if (rel_cd_ab == TRUE): # ab≜cd & cd⋣ef ==> ab⋣ef
+                                    origin = ['NegTransP_DEQ_L', [ab, DEQ, cd, FALSE, ef]]
                                     app_ac(origin, set_vdiff_relation(closure, ab, ef, FALSE), adds, colls)
                         elif rel_ab_cd == FALSE:
                             rel_cd_ef = get_vdiff_relation(closure, cd, ef)
-                            if rel_cd_ef == TRUE: # abScd & cdRef
+                            if rel_cd_ef == TRUE: # ab⋣cd & cd⊒ef
                                 rel_ef_cd = get_vdiff_relation(closure, ef, cd)
-                                if rel_ef_cd == TRUE: # abScd & cd DEQ ef
-                                    origin = ['NegTransP2', [ab, FALSE, cd, DEQ, ef]]
+                                if rel_ef_cd == TRUE: # ab⋣cd & cd≜ef ==> ab⋣ef
+                                    origin = ['NegTransP_DEQ_R', [ab, FALSE, cd, DEQ, ef]]
                                     app_ac(origin, set_vdiff_relation(closure, ab, ef, FALSE), adds, colls)
-                            elif rel_cd_ef == FALSE: # abScd & cdSef
+                            elif rel_cd_ef == FALSE: # ab⋣cd & cd⋣ef
                                 origin = ['NegTransP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
                                 app_ac(origin, set_vdiff_relation(closure, ab, ef, FALSE), adds, colls)
-                                if ab.natural_zero(): # xxScd & cdRef ==> feRdc
+                                if ab.natural_zero(): # xx⋣cd & cd⋣ef ==> fe⋣dc
                                     dc = cd.inv()
                                     fe = ef.inv()
-                                    origin = ['NegInvP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
-                                    app_ac(origin, set_vdiff_relation(closure, fe, dc, FALSE), adds, colls)                            
-                                if ef.natural_zero(): # abScd & cdSxx ==> dcSba
+                                    origin = ['NegInvP_L', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
+                                    app_ac(origin, set_vdiff_relation(closure, fe, dc, FALSE), adds, colls)
+                                if ef.natural_zero(): # ab⋣cd & cd⋣xx ==> dc⋣ba
                                     ba = ab.inv()
                                     dc = cd.inv()
-                                    origin = ['NegInvP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
+                                    origin = ['NegInvP_R', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
                                     app_ac(origin, set_vdiff_relation(closure, dc, ba, FALSE), adds, colls)
-                                if ab.natural_zero() and ef.natural_zero(): # xxScd & cdSxx
-                                    fe = ef.inv()
-                                    origin = ['NegInvP', [ab, rel_ab_cd, cd, rel_cd_ef, ef]]
-                                    app_ac(origin, set_vdiff_relation(closure, fe, dc, FALSE), adds, colls)                            
+
                         if colls: # A collision has occurred — abort
                             return (closure, adds, colls)
         return (closure, adds, colls)
