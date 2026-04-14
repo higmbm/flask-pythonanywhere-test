@@ -1,0 +1,410 @@
+# CONTEXT.md — Eudoxa Project
+
+## Purpose
+
+Eudoxa is a decision-support web application implementing a formal framework for multi-aspect value comparison. It allows users to define **aspects** (evaluation dimensions), **aspect levels** (the possible values of an aspect), **aspect level relations** (ordering between levels), **value differences** (VDiffs, e.g. Δ(VG,G)), **value difference comparisons** (a partial order on VDiffs), **consequences** (tuples assigning a level to each aspect), and a **dominance relation** on consequences.
+
+The project is a Flask web application intended to run on PythonAnywhere as well as locally in Eclipse.
+
+---
+
+## Repository layout
+
+```
+flask-pythonanywhere-test/
+├── app.py                  Flask application — routes and session helpers
+├── eudoxa.py               Core data model — all domain logic
+├── requirements.txt
+├── tests/
+│   └── test_closure.py     Unit tests for EudoxaManager.closure()
+├── static/
+│   ├── common.js           Shared JS utilities
+│   ├── nav.js              Navbar injection (fetches project name + aspects)
+│   └── styles/
+│       ├── common.css
+│       ├── aspect_detail.css
+│       ├── aspects.css
+│       ├── consequences.css
+│       ├── index.css
+│       ├── levels.css
+│       └── vdiff_matrix.css
+└── templates/
+    ├── index.html          "/" — project home, aspects summary, consequences
+    ├── aspects.html        "/aspects" — aspect table
+    ├── aspect_detail.html  "/aspects/<name>" — levels, relations matrix, graph
+    ├── consequences.html   "/consequences" — named consequences + comparison
+    ├── vdiff_matrix.html   "/vdiff-matrix" — VDiff comparison matrix
+    ├── dominance_graph.html"/dominance-graph"
+    └── levels.html         "/aspects/<name>/levels"
+```
+
+---
+
+## Core model (`eudoxa.py`)
+
+### Key constants
+
+| Name | Value | Meaning |
+|---|---|---|
+| `PROJ` | `"\|PROJ\|"` | Excel tab: project metadata |
+| `ASP` | `"\|ASP\| "` | Excel tab prefix: one per aspect |
+| `CONS` | `"\|CONS\|"` | Excel tab: consequences |
+| `VDCM` | `"\|VDCM\|"` | Excel tab: VDiff comparison matrix |
+| `DELTA` | `"Δ"` | VDiff display prefix |
+| `ZDIFF_TUPLE` | `(None, None)` | Internal dict key for natural zero-diffs |
+| `ZDIFF_DISPLAY` | `"◬"` (U+25EC) | Display/persistence symbol for natural zero-diffs |
+| `TRUE` | `"⊒"` | VDCM: vd1 ⊒ vd2 (vd1 ≥ vd2 in the VDiff order) |
+| `FALSE` | `"⋣"` | VDCM: vd1 ⋣ vd2 (vd1 < vd2) |
+| `UNDEFINED` | `""` | VDCM: relation not yet set |
+| `BT` / `BTE` / `EQ` / `WTE` / `WT` | `≻ ⪰ ∼ ⪯ ≺` | Aspect level relations |
+| `GT` / `GTE` / `DEQ` / `LTE` / `LT` | `⊐ ⊒ ≜ ⊑ ⊏` | VDiff order relations (derived) |
+
+### Natural zero-diffs
+
+A natural zero-diff `◬` for aspect A represents the difference Δ(X,X) — any level compared to itself. Internally keyed as `(None, None)` in the VDCM dict.
+Normalisation to `(None, None)` happens in `_vd_key`, `get_vdiff_relation`, and `set_vdiff_relation` by checking `from_level == to_level`. Aspect level `*` is **not** reserved (unlike in earlier versions).
+
+### VDiff ordering: TRUE/FALSE vs GT/GTE/DEQ/LTE/LT
+
+The VDCM stores raw `TRUE`/`FALSE`/`UNDEFINED` entries for ordered pairs.
+The derived order relation shown in the UI is computed from the raw forward and backward entries:
+
+- `TRUE` fwd + `FALSE` bwd → `⊐` (GT, strictly greater)
+- `TRUE` fwd + `TRUE` bwd → `≜` (DEQ, equal in VDiff order)
+- `TRUE` fwd + `UNDEFINED` bwd → `⊒` (GTE)
+- `FALSE` fwd + `TRUE` bwd → `⊏` (LT)
+- etc.
+
+### VDiff ordering in export and UI
+
+VDiffs are exported and displayed sorted by `_sorted_vdiffs(asp)`: zero-diff first, then `(from, to)` pairs sorted by `(level_index[from], level_index[to])` where `level_index` follows the insertion order of levels in the aspect.
+
+### Excel format
+
+Tabs in order: `|PROJ|`, `|ASP| <name>` (one per aspect), `|CONS|`, `|VDCM|`.
+
+**`|PROJ|` tab:**
+```
+EUDOXA    0.1
+Project name:  <name>
+Author:        <author>
+Aspects:
+-              <aspect1>
+-              <aspect2>
+...
+```
+Aspect order in `|PROJ|` controls import order, which becomes `mgr.aspects` dict insertion order, which drives all views and exports.
+
+**`|VDCM|` tab layout:**
+- Row 2: aspect name column headers (written only on first column of each aspect block)
+- Row 3: VDiff labels (`◬`, `(VG,G)`, …); col C is the corner cell `Δ\Δ`
+- Row 4+: col B = aspect name (only on first row of each aspect block), col C = VDiff label, cols D+ = relation values
+
+Import tracks `current_row_asp` to handle blank col B cells (continuation rows). Import accepts `◬` as the natural zero-diff label.
+
+### Aspect name restrictions
+
+- Aspect names may **not** contain `|` (enforced in `add_aspect`), because `|` is used as separator in the `selPair` dropdown value encoding in `/vdiff-matrix`.
+- Aspect names may not be duplicates.
+
+### Session storage
+
+The `EudoxaManager` is serialised via `to_dict()` / `from_dict()` and persisted to a server-side file store at `.manager_store/<sid>.json`, keyed by a session ID (`session["sid"]`). The Flask cookie holds only `sid`, `project_name`, and `author` — it does **not** hold the serialised manager. This avoids Flask's ~4 KB signed cookie limit.
+
+The store directory is configurable via the `MANAGER_STORE_DIR` environment variable, defaulting to `.manager_store/` adjacent to `app.py`.
+
+#### Session helpers
+
+```python
+_store_path(sid)        # returns file path for a given session ID
+_get_sid()              # returns session["sid"], creating one (uuid4.hex) if absent
+load_manager_or_400()   # reads and deserialises from file store; aborts 400 if missing
+save_manager(mgr)       # serialises and writes to file store
+```
+
+### `to_dict` / `from_dict` serialisation
+
+VDCM keys use `||` separators:
+- Aspect pair key: `"A1|||A2"`
+- VDiff pair key: `"f1::t1>>f2::t2"` where `None` is serialised as `""`
+
+---
+
+## Flask app (`app.py`)
+
+### Routes
+
+#### HTML pages
+
+| Route | Template | Description |
+|---|---|---|
+| `GET /` | `index.html` | Project home |
+| `GET /aspects` | `aspects.html` | Aspect table |
+| `GET /aspects/<name>` | `aspect_detail.html` | Levels, relations, graph |
+| `GET /aspects/<name>/levels` | `levels.html` | Level list |
+| `GET /consequences` | `consequences.html` | Named consequences |
+| `GET /vdiff-matrix` | `vdiff_matrix.html` | VDiff comparison matrix |
+| `GET /dominance-graph` | `dominance_graph.html` | Dominance graph |
+| `GET /favicon.ico` | — | SVG favicon served dynamically (no static file) |
+
+#### API — Project
+
+| Method | Route | Description |
+|---|---|---|
+| `POST` | `/api/project` | Create project; accepts `project_name` and optional `author` |
+| `PUT` | `/api/project` | Rename / update author; clears author if key present but empty |
+| `GET` | `/api/project` | Returns `{ project_name, author }`; 404 if no store file exists |
+| `DELETE` | `/api/project` | Clears session and removes store file |
+| `POST` | `/api/project/import` | Import from Excel |
+| `GET` | `/api/export-project` | Download Excel workbook |
+
+#### API — Aspects
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/api/aspects` | List aspects (table rows) |
+| `POST` | `/api/aspects` | Add aspect |
+| `PATCH` | `/api/aspects` | Reorder aspects |
+| `PATCH` | `/api/aspects/<name>` | Update description |
+| `GET` | `/api/aspect-names` | List aspect names only |
+| `GET` | `/api/aspects/<name>/levels` | List levels |
+| `POST` | `/api/aspects/<name>/levels` | Add level |
+| `PATCH` | `/api/aspects/<name>/levels/<level>` | Update level description |
+| `GET` | `/api/aspects/<name>/relations` | Get relations matrix |
+| `PATCH` | `/api/aspects/<name>/relations/<la>/<lb>` | Set relation |
+| `GET` | `/api/aspects/<name>/level-graph` | Level graph for Vis.js |
+| `GET` | `/api/level-descriptions` | All level descriptions |
+| `GET` | `/api/aspects/<name>/vdiff-classification` | Classify VDiffs as non_negative / negative / undecided; `?closure=1` for closure-based classification |
+
+#### API — VDiff matrix
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/api/vdiff-matrix/<an1>/<an2>` | Get sub-matrix with derived order relations |
+| `PATCH` | `/api/vdiff-matrix/<an1>/<l1a>/<l1b>/<an2>/<l2a>/<l2b>` | Set VDiff order relation |
+| `POST` | `/api/vdiff-matrix/batch` | Apply a batch of VDiff order relation changes atomically; aborts all on collision |
+
+
+#### API — Other
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/api/constants` | Symbol constants for the UI |
+| `GET` | `/api/consequences` | Named consequences table |
+| `POST` | `/api/consequences` | Add consequence |
+| `GET` | `/api/consequence_space` | Full consequence space |
+| `GET` | `/api/dominance-graph` | Dominance graph data |
+
+#### VDIFF formatting helpers
+
+`_make_vd(asp, la, lb)`, `_fmt_tokens`, `_fmt_entry`, `_fmt_coll` are module-level helpers shared by `patch_vdiff_relation` and
+`batch_patch_vdiff_relations`. `_make_vd` normalises `la == lb == "*"` to a natural zero-diff VDiff.
+
+---
+
+## Navigation bar (`nav.js`)
+
+Injected above the first `<h1>` on every page (loaded with `defer`). Format:
+
+```
+EUDOXA 0.1: Project | Aspects>A1-A2-A3 | Consequences | Value differences
+```
+
+- Fetches `/api/constants` → sets `window.EUDOXA`
+- Fetches `/api/project` and `/api/aspects` in parallel; returns early silently if either is non-OK — so `/api/project` is a **critical endpoint** for the UI even on pages that don't otherwise use it 
+- Current page link shown bold and non-clickable (`.site-nav-current`)
+- Fails silently (non-critical)
+
+---
+
+## UI conventions
+
+### Inference panels
+
+Both `/aspects/<name>` and `/vdiff-matrix` show an inference panel after setting or unsetting a relation. Structure:
+
+- Green box (`.asp-infer-ok` / `.vdiff-infer-ok`) for success
+- Red box (`.asp-infer-coll` / `.vdiff-infer-coll`) for collision
+- Collapsible `<details>` sections: "Added to matrix (N)" and "Inferred in closure (N)", collapsed by default
+- No auto-hide timer — panel stays until next relation change or pair switch
+
+### VDiff matrix view (`/vdiff-matrix`)
+
+- Single `<select id="selPair">` dropdown with values `"A1|A2"` (pipe-separated) and display labels `"A1-A2"`. Aspect names may not contain `|`.
+- Matrix loads immediately on page open and on pair selection change.
+- **Batch apply workflow:** relation dropdowns do not fire API calls immediately.
+  Changes are accumulated in a `pendingChanges` Map (keyed by cell coordinates).
+  Pending dropdowns are highlighted amber (`#ffe082`, class `.vdiff-pending`).
+  *Apply changes* and *Discard changes* buttons in the section header are disabled until at least one change is pending.
+- Clicking *Apply changes* POSTs all pending changes to `/api/vdiff-matrix/batch`.
+  An indeterminate progress bar is shown during the request. On success the matrix reloads and highlights clear. On collision **pending changes remain highlighted**
+  so the user can deselect the offending relation(s) and retry; the inference panel explains this. Clicking *Discard changes* restores all dropdowns and clears the pending state at any time.
+- The inference panel sits between the section header and the matrix table so it is always visible without scrolling. It stays visible until the next Apply, Discard, or pair switch.
+- Switching pair with pending changes prompts a confirmation dialog. Navigating away from the page with pending changes triggers a `beforeunload` guard.
+- Toggle state of *Hide/Show negative* persists across pair changes.
+
+### Colour coding (relations)
+
+| Colour | Meaning |
+|---|---|
+| Green (`#e6f4ea`) | Better / GT / GTE |
+| Yellow (`#fffde7`) | Equal / DEQ |
+| Red (`#fce8e6`) | Worse / LT / LTE / FALSE |
+| Off-white (`#f8f8f8`) | Undefined |
+| Grey (`#d8d8d8`) | Diagonal (immutable) |
+| Amber (`#ffe082`) | Pending (changed but not yet applied) |
+
+### Button styles
+
+- `.primary` — blue (`#0b5cff`), white text
+- `.danger` — red (`#b00020`), white text
+- Default — grey (`#f6f6f6`), matches `.header-link-button` exactly
+- `.header-link-button` — `<a>` styled as a button (defined in `common.css`)
+
+---
+
+## Test files
+
+| File | Description |
+|---|---|
+| `Konsertproblemet.xlsx` | Canonical test file — new format with `◬`, `\|PROJ\|` tab, cross-aspect VDCM entry `Δ(G,IG)⊒Δ(VG,G)` |
+| `K_err.xlsx` | Collision test — cell D5 in `\|VDCM\|` causes `Δ(VG,G)⋣◬` to conflict with inferred `Δ(VG,G)⊒◬` |
+| `konsert.xlsx` | Older format without `\|PROJ\|` tab |
+
+---
+
+## VDiff classification
+
+VDiffs for a given aspect are classified into three mutually exclusive and exhaustive types based on their relation to the natural zero-diff ◬:
+
+- **non_negative**: Δ(X,Y) ⊒ ◬  (forward relation is TRUE, or natural zero-diff)
+- **negative**: Δ(X,Y) ⋣ ◬  (forward relation is FALSE)
+- **undecided**: no relation to ◬ set (forward relation is UNDEFINED)
+
+The natural zero-diff ◬ is always classified as non_negative.
+
+### Implementation
+
+`classify_vdiffs(asp: Aspect, vdcm) -> dict` is a **module-level function** in `eudoxa.py` (grouped with `non_neg`, `neg` etc.), taking an `Aspect` and any vdcm — the live matrix or a computed closure. Returns a dict with keys `non_negative`, `negative`, `undecided`, each mapping to a list of `VDiff` objects in `asp.vdiffs` order.
+
+The existing `non_neg` and `neg` functions were corrected to handle the natural zero-diff explicitly (previously they would incorrectly return `False` for it).
+
+### API route
+
+`GET /api/aspects/<name>/vdiff-classification`  
+Query param: `closure=1` to classify against the VDCM closure instead of the live matrix (calls `mgr.closure()`, returns 409 if closure has collisions).  
+Response: `{ "non_negative": [...], "negative": [...], "undecided": [...] }`  
+Each list contains VDiff label strings (`◬`, `Δ(VG,G)`, …) matching the labels used in `/api/vdiff-matrix`.
+
+### UI
+
+`/vdiff-matrix` has a "Hide negative / Show negative" toggle button to the right of the `Δ(<name>) vs Δ(<name>)` header. Hides/shows rows and columns whose label is in the negative set. Classification is fetched in parallel with the Imatrix via `Promise.all`. Toggle state persists across aspect pair changes.
+
+---
+
+## Closure algorithm (`EudoxaManager.closure`)
+
+Computes the transitive closure of the ⊒ relation over all VDiffs, checking internal consistency. Returns `(closure, adds, colls)`: the closed matrix, list of inferences made, and list of collisions (inconsistencies). A non-empty `colls` means the preference structure is inconsistent.
+
+### Inference rules
+
+| Label | Premises | Conclusion | Notes |
+|---|---|---|---|
+| `DiffP` | cd⊒ef (same aspect) | ce⊒df | Intra-aspect difference property |
+| `NegDiffP` | cd⋣ef (same aspect) | fd⋣ec | Negative difference property |
+| `TransP` | ab⊒cd, cd⊒ef | ab⊒ef | Positive transitivity |
+| `InvP_R` | ab⊒cd, cd⊒xx | dc⊒ba | Inversion when right endpoint is zero-diff |
+| `InvP_L` | xx⊒cd, cd⊒ef | fe⊒dc | Inversion when left endpoint is zero-diff |
+| `NegTransP` | ab⋣cd, cd⋣ef | ab⋣ef | Negative transitivity |
+| `NegTransP_DEQ_L` | ab≜cd, cd⋣ef | ab⋣ef | Neg. transitivity; left premise weakened to ≜ |
+| `NegTransP_DEQ_R` | ab⋣cd, cd≜ef | ab⋣ef | Neg. transitivity; right premise weakened to ≜ |
+| `NegInvP_L` | xx⋣cd, cd⋣ef | fe⋣dc | Neg. inversion when left endpoint is zero-diff |
+| `NegInvP_R` | ab⋣cd, cd⋣xx | dc⋣ba | Neg. inversion when right endpoint is zero-diff |
+
+`xx` denotes a natural zero-diff (from_level == to_level). `InvP_L`/`InvP_R` and `NegInvP_L`/`NegInvP_R` are not derivable by chaining `DiffP`/`NegDiffP`
+and are therefore necessary axioms, not speed-up heuristics. `NegTransP_DEQ_L` and `NegTransP_DEQ_R` are negative-transitivity variants (conclusion is `⋣`), not variants of positive transitivity — the former label `TransP2` was a misnomer.
+
+### Unit tests (`tests/test_closure.py`)
+
+34 tests organised into eight classes, run with `python -m unittest tests/test_closure.py`.
+
+| Class | What is tested |
+|---|---|
+| `TestClosureBasic` | Empty manager; single relation; zero-diff reflexivity; unrelated-cell isolation |
+| `TestClosureTransP` | Intra- and cross-aspect chains; length-4 chain; no spurious reverse |
+| `TestClosureNegTransP` | Cross-aspect and length-4 negative chains; single-premise isolation |
+| `TestClosureDiffP` | `DiffP` and `NegDiffP`; cross-aspect guard; `DiffP`→`TransP` multi-pass case |
+| `TestClosureInvP` | `InvP_R` and `InvP_L` (both zero-diff endpoint variants) |
+| `TestClosureNegInvP` | `NegInvP_L` and `NegInvP_R` |
+| `TestClosureNegTransPDEQ` | `NegTransP_DEQ_L`, `NegTransP_DEQ_R`; DEQ-alone spurious-⋣ guard |
+| `TestClosureCollisions` | Direct clash via `set_vdiff_relation`; closure-derived collisions for every rule |
+
+Helper functions `make_mgr(aspects)` and `rel(closure, a1, l1a, l1b, a2, l2a, l2b)` reduce boilerplate throughout.
+
+### Complexity
+
+The algorithm runs a fixed-point outer loop (repeat until no new entry is added to the closure), with two phases per iteration:
+
+- **Phase 1 — DiffP / NegDiffP** (same-aspect only): iterates over aspects and   then over all ordered pairs of levels within each aspect, so cost is O(Σ_asp n_asp⁴) per outer iteration — much cheaper than O(n⁴) because cross-aspect pairs are never visited.
+- **Phase 2 — TransP / InvP / NegTransP / NegInvP** (cross-aspect): Floyd-Warshall with `cd` as the outermost (pivot) loop, then `ab` and `ef` as inner loops. Cost is O(n³) per outer iteration. InvP/NegInvP are handled inside Phase 2 via zero-diff checks (`ef.natural_zero()`, `ab.natural_zero()`) because they involve cross-aspect triples.
+
+The fixed-point loop terminates because every iteration must add at least one new entry (the closure is monotone and finite). Worst-case complexity is O(n⁴) — when DiffP and TransP alternate to depth n — but the typical depth d ≈ 2–4, giving O(d·n³) in practice. The `cd`-outermost order in Phase 2 means a single Phase 2 pass suffices for pure transitivity chains (Floyd-Warshall invariant);
+extra outer iterations are only needed when Phase 1 adds new entries that create new TransP premises.
+
+## Known issues
+
+- **Incomplete consequences** — decide on how to handle consequences that are added before first aspect level is added.
+
+- **Aspect reordering via drag-and-drop** in `/` was attempted but deferred.
+
+- `pos`, `zero`, and `non_pos` in `eudoxa.py` have the same natural-zero bug that was fixed in `non_neg` and `neg` — they return incorrect results for the natural zero-diff. Fix when these functions are needed.
+
+- **Response time** for Apply changes in `/vdiff-matrix` is dominated by the closure computation. Batch apply (one closure run for all pending changes) is implemented for VDiff relations but not yet for aspect-level relations. Worst-case complexity is O(n⁴) but typical cost is O(d·n³) with d ≈ 2–4. An incremental closure algorithm (O(n²) per relation change) remains a longer-term option.
+
+---
+
+## Planned/pending work
+
+- Progress bar for export and import
+
+- Add batch set/unset for aspect-level relations (mirrors the vdiff-matrix batch apply)
+
+- Consider incremental closure algorithm to reduce per-apply cost from O(n⁴) to O(n²) per relation
+
+- Add Delete aspect level functionality
+
+- Add Delete aspect functionality
+
+- Error handling for two identical aspect levels in "/aspects/<name>"
+
+- Show collection of differences (special view?) and let the user set "undecided" differences as pos/non-neg/zero/non-pos/neg
+
+- Design choice: Special treatment of natural zero diff, to avoid redundancy?
+
+- Vdiff relation matrix closure
+
+- Show vdiffs for a given aspect (organized by level)
+
+- Show vdiff matrix closure
+
+- Change (re-sort) aspect order 
+
+- Manually change (re-sort) aspect level order
+
+- Automatically change (re-sort) aspect level order according to some criterion
+
+- Add 'Maximize' and 'Minimize' property to numerical aspects, and apply to all levels
+
+- Import consequences only
+
+- Export single aspect
+
+- More feedback (and more human-readable) to user on import and export
+
+- Export for utility functions and utility difference calculations
+
+- Client-side logging
+
+- Server-side logging
+
+- Change aspect data type to "categorical" (str) and "numerical" (float)
