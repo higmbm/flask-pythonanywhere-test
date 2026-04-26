@@ -198,10 +198,11 @@ The vdcm is stored as a two-level JSON object mirroring the adjacency dict:
 | `PATCH` | `/api/aspects/<name>` | Update description |
 | `GET` | `/api/aspect-names` | List aspect names only |
 | `GET` | `/api/aspects/<name>/levels` | List levels |
-| `POST` | `/api/aspects/<name>/levels` | Add level |
+| `POST` | `/api/aspects/<name>/levels` | Add level; raises 400 if level already exists |
 | `PATCH` | `/api/aspects/<name>/levels/<level>` | Update level description |
 | `GET` | `/api/aspects/<name>/relations` | Get relations matrix |
 | `PATCH` | `/api/aspects/<name>/relations/<la>/<lb>` | Set relation |
+| `POST` | `/api/aspects/<name>/relations/batch` | Apply a batch of relation changes atomically; aborts all on collision |
 | `GET` | `/api/aspects/<name>/level-graph` | Level graph for Vis.js |
 | `GET` | `/api/level-descriptions` | All level descriptions |
 | `GET` | `/api/aspects/<name>/vdiff-classification` | Classify VDiffs as non_negative / negative / undecided; `?closure=1` for closure-based classification |
@@ -225,10 +226,11 @@ The vdcm is stored as a two-level JSON object mirroring the adjacency dict:
 | `GET` | `/api/consequence_space` | Full consequence space |
 | `GET` | `/api/dominance-graph` | Dominance graph data |
 
-#### VDIFF formatting helpers
+#### Formatting helpers
 
-`_make_vd(asp, la, lb)`, `_fmt_tokens`, `_fmt_entry`, `_fmt_coll` are module-level helpers shared by `patch_vdiff_relation` and
-`batch_patch_vdiff_relations`. `_make_vd` normalises `la == lb == "*"` to a natural zero-diff VDiff.
+`_make_vd(asp, la, lb)`, `_fmt_tokens`, `_fmt_entry`, `_fmt_coll` are module-level helpers shared by `patch_vdiff_relation` and `batch_patch_vdiff_relations`. `_make_vd` normalises `la == lb == "*"` to a natural zero-diff VDiff.
+
+`_fmt_al_tokens`, `_fmt_al_origin`, `_fmt_al_entry`, `_fmt_al_coll` are the equivalent module-level helpers for aspect level relation endpoints (`patch_relation` and `batch_patch_relations`).
 
 ---
 
@@ -249,14 +251,35 @@ EUDOXA 0.1: Project | Aspects>A1-A2-A3 | Consequences | Value differences
 
 ## UI conventions
 
+### Form feedback (add-level / add-consequence)
+
+Both `/aspects/<name>` and `/consequences` show inline feedback after an add-form submission instead of browser `alert()` dialogs.
+
+- **Success** — green box (`.feedback-ok`, defined in `common.css`): `"Level '<name>' added."` / `"Consequence '<name>' added."` with optional `"New levels: …"` suffix.
+- **Failure** — red box (`.feedback-error`, defined in `common.css`): validation message or `j.error` from the API response.
+- The feedback element persists until the next form submission or *Clear* click.
+- In `aspect_detail.html` the element is `<p id="addLevelFeedback">` placed below the levels table.
+- In `consequences.html` the element is `<p id="addConsequenceFeedback">` inside the existing `.add-consequence-notice` tfoot row, which is shown/hidden by `showConsequenceFeedback()` / `hideConsequenceFeedback()`.
+
 ### Inference panels
 
-Both `/aspects/<name>` and `/vdiff-matrix` show an inference panel after setting or unsetting a relation. Structure:
+Both `/aspects/<name>` and `/vdiff-matrix` show an inference panel after applying changes. Structure:
 
 - Green box (`.asp-infer-ok` / `.vdiff-infer-ok`) for success
 - Red box (`.asp-infer-coll` / `.vdiff-infer-coll`) for collision
 - Collapsible `<details>` sections: "Added to matrix (N)" and "Inferred in closure (N)", collapsed by default
-- No auto-hide timer — panel stays until next relation change or pair switch
+- No auto-hide timer — panel stays until next Apply, Discard, or pair switch
+
+### Aspect detail view (`/aspects/<name>`)
+
+- **Batch apply workflow:** the level relations matrix uses the same pending-changes pattern as the VDiff matrix (see below).
+  Changes are accumulated in a `pendingChanges` Map (keyed by `"la|||lb"`).
+  Pending cells show the colour of the newly selected relation plus a dashed amber outline (`#e6c200`, class `.rel-pending` on the `<td>`).
+  *Apply changes* and *Discard changes* buttons in the section header are disabled until at least one change is pending.
+- Clicking *Apply changes* POSTs all pending changes to `/api/aspects/<name>/relations/batch`.
+  On success the matrix reloads and highlights clear. On collision **pending changes remain highlighted** so the user can deselect the offending relation(s) and retry.
+- `loadRelations()` always clears pending state (matrix is fully replaced on every call).
+- Navigating away with pending changes triggers a `beforeunload` guard.
 
 ### VDiff matrix view (`/vdiff-matrix`)
 
@@ -264,7 +287,7 @@ Both `/aspects/<name>` and `/vdiff-matrix` show an inference panel after setting
 - Matrix loads immediately on page open and on pair selection change.
 - **Batch apply workflow:** relation dropdowns do not fire API calls immediately.
   Changes are accumulated in a `pendingChanges` Map (keyed by cell coordinates).
-  Pending dropdowns are highlighted amber (`#ffe082`, class `.vdiff-pending`).
+  Pending cells show the colour of the newly selected relation plus a dashed amber outline (`#e6c200`, class `.vdiff-pending` on the `<td>`).
   *Apply changes* and *Discard changes* buttons in the section header are disabled until at least one change is pending.
 - Clicking *Apply changes* POSTs all pending changes to `/api/vdiff-matrix/batch`.
   An indeterminate progress bar (`.progress-bar`) is shown during the request. On success the matrix reloads and highlights clear. On collision **pending changes remain highlighted**
@@ -282,7 +305,7 @@ Both `/aspects/<name>` and `/vdiff-matrix` show an inference panel after setting
 | Red (`#fce8e6`) | Worse / LT / LTE / FALSE |
 | Off-white (`#f8f8f8`) | Undefined |
 | Grey (`#d8d8d8`) | Diagonal (immutable) |
-| Amber (`#ffe082`) | Pending (changed but not yet applied) |
+| Dashed amber outline (`#e6c200`) | Pending (changed but not yet applied) |
 
 ### Indeterminate progress bar
 
@@ -295,6 +318,7 @@ finally { progressBar.hidden = true; }
 ```
 
 Used on:
+- `/aspects/<name>` — shown during *Apply changes* (`POST /api/aspects/<name>/relations/batch`)
 - `/vdiff-matrix` — shown during *Apply changes* (`POST /api/vdiff-matrix/batch`)
 - `/` — shown during export (`GET /api/export-project`) and during import (`POST /api/project` + `POST /api/project/import`)
 
@@ -404,21 +428,17 @@ extra outer iterations are only needed when Phase 1 adds new entries that create
 
 - `pos`, `zero`, and `non_pos` had a natural-zero bug (returning incorrect results for ◬) that was present in `non_neg` and `neg` too; all five were corrected in the vdcm refactor (branch `refactor/vdcm`).
 
-- **Response time** for Apply changes in `/vdiff-matrix` is dominated by the closure computation. Batch apply (one closure run for all pending changes) is implemented for VDiff relations but not yet for aspect-level relations. Worst-case complexity is O(n⁴) but typical cost is O(d·n³) with d ≈ 2–4. An incremental closure algorithm (O(n²) per relation change) remains a longer-term option.
+- **Response time** for Apply changes in `/vdiff-matrix` and `/aspects/<name>` is dominated by the closure computation. Worst-case complexity is O(n⁴) but typical cost is O(d·n³) with d ≈ 2–4. An incremental closure algorithm (O(n²) per relation change) remains a longer-term option.
 
 ---
 
 ## Planned/pending work
-
-- Add batch set/unset for aspect-level relations (mirrors the vdiff-matrix batch apply)
 
 - Consider incremental closure algorithm to reduce per-apply cost from O(n⁴) to O(n²) per relation
 
 - Add Delete aspect level functionality
 
 - Add Delete aspect functionality
-
-- Error handling for two identical aspect levels in "/aspects/<name>"
 
 - Show collection of differences (special view?) and let the user set "undecided" differences as pos/non-neg/zero/non-pos/neg
 

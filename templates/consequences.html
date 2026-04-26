@@ -40,7 +40,7 @@
         </tr>
         <tr class="add-consequence-notice" hidden>
           <td id="addConsequenceNoticeCell" colspan="1">
-            <p id="newLevelsNotice" class="new-levels-notice"></p>
+            <p id="addConsequenceFeedback"></p>
           </td>
         </tr>
       </tfoot>
@@ -83,6 +83,17 @@
     const NEW_LEVEL_SENTINEL = "__new__";
     let aspectData   = [];  // [{name, levels}, ...]
     let levelDescs   = {};  // {aspectName: {level: description}}
+
+    function showConsequenceFeedback(msg, isOk) {
+      const p   = document.getElementById("addConsequenceFeedback");
+      const row = document.querySelector(".add-consequence-notice");
+      p.textContent = msg;
+      p.className   = isOk ? "feedback-ok" : "feedback-error";
+      row.hidden    = false;
+    }
+    function hideConsequenceFeedback() {
+      document.querySelector(".add-consequence-notice").hidden = true;
+    }
 
     // ── Load aspects (needed to build add-consequence form) ────
     async function loadAspects() {
@@ -236,16 +247,16 @@
     // ── Add consequence ────────────────────────────────────────
     document.getElementById("btnAddConsequence").addEventListener("click", async () => {
       const shortName = document.getElementById("inputShortName").value.trim();
-      if (!shortName) { alert("Short name must be non-empty."); return; }
+      if (!shortName) { showConsequenceFeedback("Short name must be non-empty.", false); return; }
 
       const payload = {};
-      let valid = true;
+      const missing = [];
       aspectData.forEach(({ name }) => {
         const value = getLevelValue(name);
-        if (!value) { alert(`Please enter a level for aspect "${name}".`); valid = false; }
+        if (!value) missing.push(name);
         payload[name] = value;
       });
-      if (!valid) return;
+      if (missing.length) { showConsequenceFeedback(`Please enter a level for: ${missing.join(", ")}.`, false); return; }
 
       const res = await fetch("/api/consequences", {
         method: "POST",
@@ -256,14 +267,9 @@
       if (res.ok) {
         const json = await res.json();
         const newLevels = json.new_levels || [];
-        const noticeRow = document.querySelector(".add-consequence-notice");
-        const notice = document.getElementById("newLevelsNotice");
-        if (newLevels.length > 0) {
-          notice.textContent = "New levels added: " + newLevels.join(", ");
-          noticeRow.hidden = false;
-        } else {
-          noticeRow.hidden = true;
-        }
+        let msg = `Consequence '${shortName}' added.`;
+        if (newLevels.length > 0) msg += ` New levels: ${newLevels.join(", ")}.`;
+        showConsequenceFeedback(msg, true);
         document.getElementById("inputShortName").value = "";
         await loadAspects();
         await loadConsequences();
@@ -272,7 +278,7 @@
       } else {
         let msg = `${res.status} ${res.statusText}`;
         try { const j = await res.json(); msg = j.error || msg; } catch {}
-        alert(msg);
+        showConsequenceFeedback(msg, false);
       }
     });
 
@@ -283,8 +289,7 @@
         const ti = container.querySelector(".level-text");
         ti.value = ""; ti.hidden = true;
       });
-      const noticeRow = document.querySelector(".add-consequence-notice");
-      if (noticeRow) noticeRow.hidden = true;
+      hideConsequenceFeedback();
     });
 
     // ── Consequence space dialog ───────────────────────────────

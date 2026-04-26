@@ -319,6 +319,13 @@ button.primary:hover {
 }
 
 /* ── Relation cell colours ───────────────────────────────── */
+
+/* Pending (unsaved) cells — dashed amber outline */
+.rel-pending {
+  outline: 2px dashed #e6c200;
+  outline-offset: -2px;
+}
+
 .rel-better {
   background: #e6f4ea !important;   /* green tint  — ≻ ⪰ */
 }

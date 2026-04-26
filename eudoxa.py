@@ -743,9 +743,8 @@ class EudoxaManager:
             raise ValueError(f"Aspect '{aspect_name}' does not exist.")
         aspect = self.get_aspect(aspect_name)
         level_str = str(level)
-        # If the level already exists, do nothing
         if level_str in aspect.levels:
-            return
+            raise ValueError(f"Level '{level_str}' already exists in aspect '{aspect_name}'.")
         # Add the new level
         aspect.add_level(level_str, description)
         # Update the value-difference comparison matrix
@@ -762,7 +761,7 @@ class EudoxaManager:
             raise ValueError(f"Aspect level '{la}' [{a_type}] does not exist.")
         if not lb_str in a.levels:
             raise ValueError(f"Aspect level '{lb}' [{a_type}] does not exist.")
-        zero = VDiff(aspect, None, None)
+        zero = NATURAL_ZERO
         vd_ab = VDiff(aspect, la_str, lb_str)
         vd_ba = VDiff(aspect, lb_str, la_str)
 
@@ -822,7 +821,7 @@ class EudoxaManager:
         staged, _, _ = self.closure()
 
         # Step 2: apply the requested addition to the staging area
-        zero  = VDiff(aspect, None, None)
+        zero  = NATURAL_ZERO
         vd_ab = VDiff(aspect, la_str, lb_str)
         vd_ba = VDiff(aspect, lb_str, la_str)
         origin = ['SETREL', [aspect, la_str, rel, lb_str]]
@@ -909,7 +908,7 @@ class EudoxaManager:
             raise ValueError(f"Aspect level '{la}' [{a_type}] does not exist.")
         if not lb_str in a.levels:
             raise ValueError(f"Aspect level '{lb}' [{a_type}] does not exist.")
-        zero = VDiff(aspect, None, None)
+        zero = NATURAL_ZERO
         vd_ab = VDiff(aspect, la_str, lb_str)
         rel_ab_z = self.get_vdiff_relation(vd_ab, zero)
         rel_z_ab = self.get_vdiff_relation(zero, vd_ab)
