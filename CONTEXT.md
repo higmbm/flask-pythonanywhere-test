@@ -198,7 +198,7 @@ The vdcm is stored as a two-level JSON object mirroring the adjacency dict:
 | `PATCH` | `/api/aspects/<name>` | Update description |
 | `GET` | `/api/aspect-names` | List aspect names only |
 | `GET` | `/api/aspects/<name>/levels` | List levels |
-| `POST` | `/api/aspects/<name>/levels` | Add level |
+| `POST` | `/api/aspects/<name>/levels` | Add level; raises 400 if level already exists |
 | `PATCH` | `/api/aspects/<name>/levels/<level>` | Update level description |
 | `GET` | `/api/aspects/<name>/relations` | Get relations matrix |
 | `PATCH` | `/api/aspects/<name>/relations/<la>/<lb>` | Set relation |
@@ -250,6 +250,16 @@ EUDOXA 0.1: Project | Aspects>A1-A2-A3 | Consequences | Value differences
 ---
 
 ## UI conventions
+
+### Form feedback (add-level / add-consequence)
+
+Both `/aspects/<name>` and `/consequences` show inline feedback after an add-form submission instead of browser `alert()` dialogs.
+
+- **Success** — green box (`.feedback-ok`, defined in `common.css`): `"Level '<name>' added."` / `"Consequence '<name>' added."` with optional `"New levels: …"` suffix.
+- **Failure** — red box (`.feedback-error`, defined in `common.css`): validation message or `j.error` from the API response.
+- The feedback element persists until the next form submission or *Clear* click.
+- In `aspect_detail.html` the element is `<p id="addLevelFeedback">` placed below the levels table.
+- In `consequences.html` the element is `<p id="addConsequenceFeedback">` inside the existing `.add-consequence-notice` tfoot row, which is shown/hidden by `showConsequenceFeedback()` / `hideConsequenceFeedback()`.
 
 ### Inference panels
 
@@ -429,8 +439,6 @@ extra outer iterations are only needed when Phase 1 adds new entries that create
 - Add Delete aspect level functionality
 
 - Add Delete aspect functionality
-
-- Error handling for two identical aspect levels in "/aspects/<name>"
 
 - Show collection of differences (special view?) and let the user set "undecided" differences as pos/non-neg/zero/non-pos/neg
 

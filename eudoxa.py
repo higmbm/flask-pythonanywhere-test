@@ -743,9 +743,8 @@ class EudoxaManager:
             raise ValueError(f"Aspect '{aspect_name}' does not exist.")
         aspect = self.get_aspect(aspect_name)
         level_str = str(level)
-        # If the level already exists, do nothing
         if level_str in aspect.levels:
-            return
+            raise ValueError(f"Level '{level_str}' already exists in aspect '{aspect_name}'.")
         # Add the new level
         aspect.add_level(level_str, description)
         # Update the value-difference comparison matrix

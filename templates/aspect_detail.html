@@ -66,7 +66,7 @@
     </tfoot>
   </table>
 
-  <p id="addLevelError" class="error" hidden data-aspect="{{ aspect_name }}"></p>
+  <p id="addLevelFeedback" hidden data-aspect="{{ aspect_name }}"></p>
 
   <!-- ── Level relations ──────────────────────────────────────── -->
   <div class="section-header">
@@ -118,7 +118,7 @@
   </div>
 
   <script>
-    const ASPECT_NAME = document.getElementById("addLevelError").dataset.aspect;
+    const ASPECT_NAME = document.getElementById("addLevelFeedback").dataset.aspect;
 
     // ── Inline description editing ───────────────────────────────
     const descDd = document.querySelector("dd.editable-desc");
@@ -194,12 +194,13 @@
     // ── Add level ────────────────────────────────────────────────
     const btnAddLevel  = document.getElementById("btnAddLevel");
     const btnClearLevel = document.getElementById("btnClearLevel");
-    const errEl        = document.getElementById("addLevelError");
+    const feedbackEl   = document.getElementById("addLevelFeedback");
 
     function clearLevelForm() {
       document.getElementById("inputLevel").value     = "";
       document.getElementById("inputLevelDesc").value = "";
-      errEl.hidden = true;
+      feedbackEl.hidden = true;
+      feedbackEl.className = "";
     }
 
     btnClearLevel.addEventListener("click", clearLevelForm);
@@ -208,7 +209,7 @@
       const level       = document.getElementById("inputLevel").value.trim();
       const description = document.getElementById("inputLevelDesc").value.trim() || null;
 
-      if (!level) { errEl.textContent = "Level must be non-empty."; errEl.hidden = false; return; }
+      if (!level) { feedbackEl.textContent = "Level must be non-empty."; feedbackEl.className = "feedback-error"; feedbackEl.hidden = false; return; }
 
       const res = await fetch(`/api/aspects/${encodeURIComponent(ASPECT_NAME)}/levels`, {
         method: "POST",
@@ -239,14 +240,18 @@
         tbody.appendChild(tr);
         attachDescEdit(descTd, levelUrl);
         clearLevelForm();
+        feedbackEl.textContent = `Level '${level}' added.`;
+        feedbackEl.className = "feedback-ok";
+        feedbackEl.hidden = false;
         document.getElementById("inputLevel").focus();
         loadRelations();
         loadLevelGraph();
       } else {
         let msg = `${res.status} ${res.statusText}`;
         try { const j = await res.json(); msg = j.error || msg; } catch {}
-        errEl.textContent = msg;
-        errEl.hidden = false;
+        feedbackEl.textContent = msg;
+        feedbackEl.className = "feedback-error";
+        feedbackEl.hidden = false;
       }
     });
     // ── Level relations matrix ───────────────────────────────────

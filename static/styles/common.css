@@ -115,6 +115,26 @@ select {
   margin-top: 0.5rem;
 }
 
+.feedback-ok {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #e8f5e9;
+  border: 1px solid #81c784;
+  border-radius: 6px;
+  color: #1a4d2a;
+  font-size: 0.9rem;
+}
+
+.feedback-error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #ffebee;
+  border: 1px solid #e57373;
+  border-radius: 6px;
+  color: #7a1a1a;
+  font-size: 0.9rem;
+}
+
 /* --- Inline description editing --------------------------- */
 td.editable-desc {
   cursor: pointer;
