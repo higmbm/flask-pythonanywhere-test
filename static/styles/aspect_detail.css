@@ -341,3 +341,70 @@ button.primary:hover {
 .rel-unset {
   background: #f8f8f8 !important;   /* off-white   — unset */
 }
+
+/* ── Level actions column ───────────────────────────────────── */
+.level-actions-cell {
+  text-align: center;
+  white-space: nowrap;
+  width: 1%;
+}
+
+button.btn-stage-delete {
+  font-size: 0.82rem;
+  padding: 0.2rem 0.55rem;
+  color: #7a1a1a;
+  border-color: #e07070;
+  background: #fff5f5;
+}
+
+button.btn-stage-delete:hover {
+  background: #fde8e8;
+}
+
+/* ── Danger button ──────────────────────────────────────────── */
+button.danger {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: white;
+}
+
+button.danger:hover {
+  background: #a93226;
+}
+
+/* ── Delete level staging panel ─────────────────────────────── */
+.delete-staging {
+  max-width: 600px;
+  margin-top: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: #fff8f0;
+  border: 1px solid #e6a020;
+  border-radius: 6px;
+  font-size: 0.92rem;
+}
+
+.delete-staging-title {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+.delete-staging ul {
+  margin: 0.2rem 0 0.6rem 1.4rem;
+  padding: 0;
+}
+
+.delete-staging li {
+  font-family: monospace;
+  font-size: 0.85rem;
+  margin: 0.1rem 0;
+}
+
+.delete-staging p {
+  margin: 0.4rem 0;
+}
+
+.delete-staging-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}

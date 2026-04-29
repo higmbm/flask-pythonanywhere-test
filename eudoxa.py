@@ -750,6 +750,104 @@ class EudoxaManager:
         # Update the value-difference comparison matrix
         self.expand_vdiff_comparison_matrix(aspect_name)
 
+    def stage_remove_aspect_level(self, aspect_name: str, level: str) -> dict:
+        """Compute the impact of removing a level without committing.
+
+        Returns a dict:
+          vdiffs_removed        — repr strings of VDiffs that will disappear
+          al_relations_unset    — [{la, relation, lb}] for set within-aspect relations
+          vdcm_entries_removed  — [{vd1, relation, vd2}] for non-UNDEFINED cross-aspect
+                                   VDCM entries (excludes NATURAL_ZERO-backed AL relations)
+          consequences_removed  — short names of consequences that will be deleted
+        """
+        if aspect_name not in self.aspects:
+            raise ValueError(f"Aspect '{aspect_name}' does not exist.")
+        aspect = self.aspects[aspect_name]
+        if level not in aspect.levels:
+            raise ValueError(f"Level '{level}' does not exist in aspect '{aspect_name}'.")
+
+        vdiffs_to_remove = [vd for vd in aspect.vdiffs
+                            if vd.from_level == level or vd.to_level == level]
+        vdiff_keys = {_vdiff_key(vd) for vd in vdiffs_to_remove}
+
+        # Within-aspect AL relations being unset
+        al_relations = []
+        for other in aspect.levels:
+            if other == level:
+                continue
+            rel = self.get_aspect_level_relation(aspect_name, level, other)
+            if rel not in (UNDEFINED,) and rel is not NotImplemented:
+                al_relations.append({"la": level, "relation": rel, "lb": other})
+
+        # Cross-aspect VDCM entries being removed (exclude NATURAL_ZERO and other
+        # deleted VDiffs since those are already covered by al_relations_unset)
+        vdcm_entries = []
+        vdcm = self.vdiff_comparison_matrix
+        seen = set()
+        for k1 in vdiff_keys:
+            row = vdcm.get(k1, {})
+            for k2, rel in row.items():
+                if rel == UNDEFINED or k2 == NATURAL_ZERO or k2 in vdiff_keys:
+                    continue
+                pair = (repr(k1), repr(k2))
+                if pair not in seen:
+                    seen.add(pair)
+                    vdcm_entries.append({"vd1": repr(k1), "relation": rel, "vd2": repr(k2)})
+        for k_other, row in vdcm.items():
+            if k_other in vdiff_keys or k_other == NATURAL_ZERO:
+                continue
+            for k1 in vdiff_keys:
+                rel = row.get(k1, UNDEFINED)
+                if rel == UNDEFINED:
+                    continue
+                pair = (repr(k_other), repr(k1))
+                if pair not in seen:
+                    seen.add(pair)
+                    vdcm_entries.append({"vd1": repr(k_other), "relation": rel, "vd2": repr(k1)})
+
+        consequences_removed = [
+            name for name, cons in self.consequences.items()
+            if cons[aspect_name] == level
+        ]
+
+        return {
+            "vdiffs_removed":       [repr(vd) for vd in vdiffs_to_remove],
+            "al_relations_unset":   al_relations,
+            "vdcm_entries_removed": vdcm_entries,
+            "consequences_removed": consequences_removed,
+        }
+
+    def confirm_remove_aspect_level(self, aspect_name: str, level: str):
+        """Remove an aspect level and all associated VDCM entries and consequences."""
+        if aspect_name not in self.aspects:
+            raise ValueError(f"Aspect '{aspect_name}' does not exist.")
+        aspect = self.aspects[aspect_name]
+        if level not in aspect.levels:
+            raise ValueError(f"Level '{level}' does not exist in aspect '{aspect_name}'.")
+
+        vdiffs_to_remove = [vd for vd in aspect.vdiffs
+                            if vd.from_level == level or vd.to_level == level]
+        vdiff_keys = {_vdiff_key(vd) for vd in vdiffs_to_remove}
+
+        # Remove VDCM rows and columns for the deleted VDiffs
+        vdcm = self.vdiff_comparison_matrix
+        for k in list(vdiff_keys):
+            vdcm.pop(k, None)
+        for row in vdcm.values():
+            for k in list(vdiff_keys):
+                row.pop(k, None)
+
+        # Remove level from aspect
+        del aspect.levels[level]
+        aspect.vdiffs = [vd for vd in aspect.vdiffs
+                         if vd.from_level != level and vd.to_level != level]
+
+        # Remove consequences that use this level
+        to_delete = [name for name, cons in self.consequences.items()
+                     if cons[aspect_name] == level]
+        for name in to_delete:
+            del self.consequences[name]
+
     def set_aspect_level_relation(self, aspect: str, la, lb, rel: str) -> Tuple:
         adds, colls = [], []
         a = self.get_aspect(aspect)

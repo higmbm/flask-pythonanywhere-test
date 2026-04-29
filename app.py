@@ -639,6 +639,29 @@ def patch_level(aspect_name, level_name):
     save_manager(mgr)
     return {"message": "Level updated"}, 200
 
+@app.get("/api/aspects/<aspect_name>/levels/<level_name>/delete-preview")
+def delete_level_preview(aspect_name, level_name):
+    """Return a preview of all data that will be removed when an aspect level is deleted."""
+    mgr = load_manager_or_400()
+    try:
+        preview = mgr.stage_remove_aspect_level(aspect_name, level_name)
+    except ValueError as e:
+        return {"error": str(e)}, 404
+    return preview, 200
+
+
+@app.delete("/api/aspects/<aspect_name>/levels/<level_name>")
+def delete_level(aspect_name, level_name):
+    """Delete an aspect level and all associated VDCM entries and consequences."""
+    mgr = load_manager_or_400()
+    try:
+        mgr.confirm_remove_aspect_level(aspect_name, level_name)
+    except ValueError as e:
+        return {"error": str(e)}, 404
+    save_manager(mgr)
+    return {"message": f"Level '{level_name}' deleted."}, 200
+
+
 # -----------------------------------------------------------
 #  REST: CONSEQUENCES
 # -----------------------------------------------------------

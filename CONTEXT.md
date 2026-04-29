@@ -200,6 +200,8 @@ The vdcm is stored as a two-level JSON object mirroring the adjacency dict:
 | `GET` | `/api/aspects/<name>/levels` | List levels |
 | `POST` | `/api/aspects/<name>/levels` | Add level; raises 400 if level already exists |
 | `PATCH` | `/api/aspects/<name>/levels/<level>` | Update level description |
+| `GET` | `/api/aspects/<name>/levels/<level>/delete-preview` | Return deletion impact (VDiffs, AL relations, VDCM entries, consequences) without committing |
+| `DELETE` | `/api/aspects/<name>/levels/<level>` | Delete aspect level and all associated data |
 | `GET` | `/api/aspects/<name>/relations` | Get relations matrix |
 | `PATCH` | `/api/aspects/<name>/relations/<la>/<lb>` | Set relation |
 | `POST` | `/api/aspects/<name>/relations/batch` | Apply a batch of relation changes atomically; aborts all on collision |
@@ -270,6 +272,26 @@ Both `/aspects/<name>` and `/vdiff-matrix` show an inference panel after applyin
 - Collapsible `<details>` sections: "Added to matrix (N)" and "Inferred in closure (N)", collapsed by default
 - No auto-hide timer — panel stays until next Apply, Discard, or pair switch
 
+### Delete aspect level (`/aspects/<name>`)
+
+Follows the same staging-then-confirm pattern used elsewhere (import, relation setting).
+
+1. The user clicks **Delete** next to a level in the levels table.
+2. The browser calls `GET /api/aspects/<name>/levels/<level>/delete-preview`, which calls `EudoxaManager.stage_remove_aspect_level`. Nothing is written; the method returns:
+   - `vdiffs_removed` — repr strings of all VDiffs whose `from_level` or `to_level` is the target level
+   - `al_relations_unset` — within-aspect AL relations currently set for pairs involving the level (BT/BTE/EQ/WTE/WT format, reported from the level's perspective)
+   - `vdcm_entries_removed` — non-UNDEFINED cross-aspect VDCM raw entries (`TRUE`/`FALSE`) involving the deleted VDiffs, excluding the NATURAL_ZERO-backed entries already covered by `al_relations_unset`
+   - `consequences_removed` — short names of consequences whose entry for this aspect equals the deleted level
+3. The staging panel (`.delete-staging`) is shown below the levels table listing all impacted data.
+4. On **Confirm deletion** the browser calls `DELETE /api/aspects/<name>/levels/<level>`, which calls `EudoxaManager.confirm_remove_aspect_level`. That method:
+   - Removes all VDCM rows keyed by a deleted VDiff, and removes those keys from every other row (including the `NATURAL_ZERO` row)
+   - Removes the level from `aspect.levels` and prunes `aspect.vdiffs`
+   - Deletes all consequences whose value for this aspect equals the deleted level
+   - Saves and returns 200; the browser reloads the page
+5. On **Cancel** the staging panel is hidden and no changes are made.
+
+The delete button column is a third `<th>`/`<td>` added to the levels table. Dynamically added rows (via *Add level*) also receive the button. Event delegation on `<tbody>` handles both.
+
 ### Aspect detail view (`/aspects/<name>`)
 
 - **Batch apply workflow:** the level relations matrix uses the same pending-changes pattern as the VDiff matrix (see below).
@@ -325,7 +347,8 @@ Used on:
 ### Button styles
 
 - `.primary` — blue (`#0b5cff`), white text
-- `.danger` — red (`#b00020`), white text
+- `.danger` — dark red (`#c0392b`), white text; used for Confirm deletion
+- `.btn-stage-delete` — pale red, used on the per-level Delete button in the levels table
 - Default — grey (`#f6f6f6`), matches `.header-link-button` exactly
 - `.header-link-button` — `<a>` styled as a button (defined in `common.css`)
 - The *Export project* button on `/` is a real `<button>` (not `<a>`); it downloads via `fetch()` + Blob URL so the progress bar can wrap the entire request
@@ -435,8 +458,6 @@ extra outer iterations are only needed when Phase 1 adds new entries that create
 ## Planned/pending work
 
 - Consider incremental closure algorithm to reduce per-apply cost from O(n⁴) to O(n²) per relation
-
-- Add Delete aspect level functionality
 
 - Add Delete aspect functionality
 
