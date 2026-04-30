@@ -45,6 +45,11 @@ button:hover {
   background: #ebebeb;
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 input[type="text"],
 textarea,
 select {
