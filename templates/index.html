@@ -50,6 +50,10 @@
         <thead>
           <tr>
             <th>Name</th>
+            <th>Data type</th>
+            <th>Description</th>
+            <th>#Levels</th>
+            <th>#Δ</th>
           </tr>
         </thead>
         <tbody id="aspectsContainer">
@@ -62,7 +66,6 @@
     <section class="section" id="consequencesSection" hidden>
       <div class="section-header">
         <h2>Consequences</h2>
-        <button id="btnShowConsequenceSpace">Show consequence space</button>
         <a href="/consequences" class="header-link-button">Manage consequences</a>
       </div>
       <table class="data-table" id="consequencesTable">
@@ -74,25 +77,6 @@
         <tbody id="consequencesBody">
           <tr><td class="muted">Loading...</td></tr>
         </tbody>
-        <tfoot class="add-consequence-foot">
-          <tr class="add-consequence-inputs">
-            <!-- Populated by JS: short-name input + one hybrid-input per aspect -->
-          </tr>
-          <tr class="add-consequence-action">
-            <td id="addConsequenceActionCell" colspan="1">
-              <div class="consequence-action-row">
-                <span class="action-spacer"></span>
-                <button id="btnAddConsequence" class="primary">Add consequence</button>
-                <button id="btnClearForm">Clear</button>
-              </div>
-            </td>
-          </tr>
-          <tr class="add-consequence-notice" hidden>
-            <td id="addConsequenceNoticeCell" colspan="1">
-              <p id="newLevelsNotice" class="new-levels-notice"></p>
-            </td>
-          </tr>
-        </tfoot>
       </table>
     </section>
 
@@ -108,23 +92,6 @@
       </div>
     </dialog>
 
-    <!-- ── Consequence space dialog ─────────────────────────── -->
-    <dialog id="consequenceSpaceDialog">
-      <div class="dialog-header">
-        <h2>Consequence space</h2>
-        <button id="btnCloseDialog" class="secondary">Close</button>
-      </div>
-      <p class="hint">
-        Highlighted rows already have a name in the named consequences set.
-        Click any row to pre-fill the add-consequence form.
-      </p>
-      <div class="dialog-table-wrapper">
-        <table class="data-table" id="consequenceSpaceTable">
-          <thead><tr id="consequenceSpaceHeaders"></tr></thead>
-          <tbody id="consequenceSpaceBody"></tbody>
-        </table>
-      </div>
-    </dialog>
 
   {% else %}
 
@@ -153,8 +120,6 @@
   {% endif %}
 
   <script>
-    const NEW_LEVEL_SENTINEL = "__new__";
-
     const appState   = document.getElementById("appState");
     const hasProject = appState.dataset.hasProject === "true";
 
@@ -448,23 +413,42 @@
         name:        row[0],
         dtype:       row[1],
         description: row[2],
-        levels:      row[3] ? row[3].split(", ").filter(Boolean) : []
+        levels:      row[3] ? row[3].split(", ").filter(Boolean) : [],
+        vdiffs:      row[4] ?? 0
       }));
 
-      // Render aspects tbody — name column only, linked
+      // Render aspects tbody — Name | Data type | Description | #Levels | #Δ
       const tbody = document.getElementById("aspectsContainer");
       if (aspectData.length === 0) {
-        tbody.innerHTML = "<tr><td class='muted'>No aspects defined yet.</td></tr>";
+        tbody.innerHTML = "<tr><td colspan='5' class='muted'>No aspects defined yet.</td></tr>";
       } else {
         tbody.innerHTML = "";
-        aspectData.forEach(({ name }) => {
+        aspectData.forEach(({ name, dtype, description, levels, vdiffs }) => {
           const tr = document.createElement("tr");
+
           const nameTd = document.createElement("td");
           const nameLink = document.createElement("a");
           nameLink.href = `/aspects/${encodeURIComponent(name)}`;
           nameLink.textContent = name;
           nameTd.appendChild(nameLink);
-          tr.appendChild(nameTd);
+
+          const dtypeTd = document.createElement("td");
+          dtypeTd.textContent = dtype;
+
+          const descTd = document.createElement("td");
+          descTd.textContent = description;
+
+          const levelsTd = document.createElement("td");
+          levelsTd.className = "num-cell";
+          const levelsLink = document.createElement("a");
+          levelsLink.href = `/aspects/${encodeURIComponent(name)}`;
+          levelsLink.textContent = levels.length;
+          levelsTd.appendChild(levelsLink);
+
+          const vdiffsTd = document.createElement("td");
+          vdiffsTd.textContent = vdiffs;
+
+          tr.append(nameTd, dtypeTd, descTd, levelsTd, vdiffsTd);
           tbody.appendChild(tr);
         });
       }
@@ -477,156 +461,8 @@
       rebuildConsequenceTableStructure();
     }
 
-    // ── Inline description editing ─────────────────────────────
-    function makeDescriptionCellEditable(td, aspectName) {
-      td.classList.add("editable-desc");
-      td.title = "Click to edit description";
-      td.addEventListener("click", () => {
-        if (td.querySelector("input")) return;  // already editing
-
-        const original = td.textContent;
-        td.textContent = "";
-
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = original;
-        input.className = "desc-edit-input";
-
-        const setBtn = document.createElement("button");
-        setBtn.textContent = "Set";
-        setBtn.className = "primary desc-edit-btn";
-
-        const cancelBtn = document.createElement("button");
-        cancelBtn.textContent = "Cancel";
-        cancelBtn.className = "desc-edit-btn";
-
-        async function commit() {
-          const newDesc = input.value.trim();
-          const res = await fetch(`/api/aspects/${encodeURIComponent(aspectName)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ description: newDesc || null })
-          });
-          if (res.ok) {
-            td.textContent = newDesc;
-            makeDescriptionCellEditable(td, aspectName);
-          } else {
-            let msg = `${res.status} ${res.statusText}`;
-            try { const j = await res.json(); msg = j.error || msg; } catch {}
-            alert(msg);
-          }
-        }
-
-        function cancel(e) {
-          if (e) e.stopPropagation();
-          td.textContent = original;
-          makeDescriptionCellEditable(td, aspectName);
-        }
-
-        setBtn.addEventListener("click", commit);
-        cancelBtn.addEventListener("click", cancel);
-        input.addEventListener("keydown", e => {
-          if (e.key === "Enter")  { e.preventDefault(); commit(); }
-          if (e.key === "Escape") { e.preventDefault(); cancel(); }
-        });
-
-        td.appendChild(input);
-        td.appendChild(setBtn);
-        td.appendChild(cancelBtn);
-        input.focus();
-        input.select();
-      });
-    }
-
-    // ── Add aspect ─────────────────────────────────────────────
-    const btnAddAspect = document.getElementById("btnAddAspect");
-    if (btnAddAspect) {
-      btnAddAspect.addEventListener("click", async () => {
-        const name        = document.getElementById("inputAspectName").value.trim();
-        const data_type   = document.getElementById("inputAspectType").value;
-        const description = document.getElementById("inputAspectDesc").value.trim() || null;
-
-        if (!name) { alert("Aspect name must be non-empty."); return; }
-        if (name.includes("|")) { alert("Aspect name may not contain '|'."); return; }
-
-        const res = await fetch("/api/aspects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, data_type, description })
-        });
-
-        if (res.ok) {
-          // Clear inputs and refresh
-          document.getElementById("inputAspectName").value = "";
-          document.getElementById("inputAspectType").value = "str";
-          document.getElementById("inputAspectDesc").value = "";
-          await loadAspects();
-          await loadConsequences();
-        } else {
-          let msg = `${res.status} ${res.statusText}`;
-          try { const j = await res.json(); msg = j.error || msg; } catch {}
-          alert(msg);
-        }
-      });
-    }
-
-    const btnClearAspectForm = document.getElementById("btnClearAspectForm");
-    if (btnClearAspectForm) {
-      btnClearAspectForm.addEventListener("click", () => {
-        document.getElementById("inputAspectName").value = "";
-        document.getElementById("inputAspectType").value = "str";
-        document.getElementById("inputAspectDesc").value = "";
-      });
-    }
-
-    // ── Hybrid dropdown/text input ─────────────────────────────
-    function buildHybridInput(aspectName, levels) {
-      const container = document.createElement("div");
-      container.className = "hybrid-input";
-      container.dataset.aspect = aspectName;
-
-      const select = document.createElement("select");
-      select.className = "level-select";
-
-      const blankOpt = document.createElement("option");
-      blankOpt.value = "";
-      blankOpt.textContent = "— select level —";
-      select.appendChild(blankOpt);
-
-      levels.forEach(level => {
-        const opt = document.createElement("option");
-        opt.value = level;
-        opt.textContent = level;
-        select.appendChild(opt);
-      });
-
-      const newOpt = document.createElement("option");
-      newOpt.value = NEW_LEVEL_SENTINEL;
-      newOpt.textContent = "New level...";
-      select.appendChild(newOpt);
-
-      const textInput = document.createElement("input");
-      textInput.type = "text";
-      textInput.className = "level-text";
-      textInput.placeholder = "New level value";
-      textInput.hidden = true;
-
-      select.addEventListener("change", () => {
-        const isNew = select.value === NEW_LEVEL_SENTINEL;
-        textInput.hidden = !isNew;
-        if (isNew) { textInput.value = ""; textInput.focus(); }
-      });
-
-      container.appendChild(select);
-      container.appendChild(textInput);
-      return container;
-    }
-
-    // ── Build / rebuild the consequences table thead + tfoot ───
+    // ── Build / rebuild the consequences table thead ───────────
     function rebuildConsequenceTableStructure() {
-      const colCount = 1 + aspectData.length;  // Short name + one per aspect
-
-      // thead
       const headersRow = document.getElementById("consequencesHeaders");
       headersRow.innerHTML = "";
       ["Short name", ...aspectData.map(a => a.name)].forEach(h => {
@@ -634,30 +470,6 @@
         th.textContent = h;
         headersRow.appendChild(th);
       });
-
-      // tfoot inputs row
-      const inputsRow = document.querySelector(".add-consequence-inputs");
-      inputsRow.innerHTML = "";
-
-      // Short name cell
-      const shortTd = document.createElement("td");
-      const shortInput = document.createElement("input");
-      shortInput.type = "text";
-      shortInput.id = "inputShortName";
-      shortInput.placeholder = "e.g. C1";
-      shortTd.appendChild(shortInput);
-      inputsRow.appendChild(shortTd);
-
-      // One hybrid-input cell per aspect
-      aspectData.forEach(({ name, levels }) => {
-        const td = document.createElement("td");
-        td.appendChild(buildHybridInput(name, levels));
-        inputsRow.appendChild(td);
-      });
-
-      // Update colspan on action and notice rows
-      document.getElementById("addConsequenceActionCell").colSpan = colCount;
-      document.getElementById("addConsequenceNoticeCell").colSpan = colCount;
     }
 
     // ── Load consequences and populate tbody ───────────────────
@@ -697,167 +509,6 @@
         });
         tbody.appendChild(tr);
       });
-    }
-
-    // ── Helper: get level value from a hybrid input ────────────
-    function getLevelValue(aspectName) {
-      const container = document.querySelector(
-        `.hybrid-input[data-aspect="${CSS.escape(aspectName)}"]`
-      );
-      if (!container) return "";
-      const select    = container.querySelector(".level-select");
-      const textInput = container.querySelector(".level-text");
-      return select.value === NEW_LEVEL_SENTINEL ? textInput.value.trim() : select.value;
-    }
-
-    // ── Add consequence ────────────────────────────────────────
-    const btnAddConsequence = document.getElementById("btnAddConsequence");
-    if (btnAddConsequence) {
-      btnAddConsequence.addEventListener("click", async () => {
-        const shortName = document.getElementById("inputShortName").value.trim();
-        if (!shortName) { alert("Short name must be non-empty."); return; }
-
-        const payload = {};
-        let valid = true;
-        aspectData.forEach(({ name }) => {
-          const value = getLevelValue(name);
-          if (!value) { alert(`Please enter a level for aspect "${name}".`); valid = false; }
-          payload[name] = value;
-        });
-        if (!valid) return;
-
-        const res = await fetch("/api/consequences", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ short_name: shortName, aspect_levels: payload })
-        });
-
-        if (res.ok) {
-          const json = await res.json();
-          const newLevels = json.new_levels || [];
-          const noticeRow = document.querySelector(".add-consequence-notice");
-          const notice = document.getElementById("newLevelsNotice");
-          if (newLevels.length > 0) {
-            notice.textContent = "New levels added: " + newLevels.join(", ");
-            noticeRow.hidden = false;
-          } else {
-            noticeRow.hidden = true;
-          }
-          document.getElementById("inputShortName").value = "";
-          await loadAspects();
-          await loadConsequences();
-        } else {
-          let msg = `${res.status} ${res.statusText}`;
-          try { const j = await res.json(); msg = j.error || msg; } catch {}
-          alert(msg);
-        }
-      });
-    }
-
-    const btnClearForm = document.getElementById("btnClearForm");
-    if (btnClearForm) {
-      btnClearForm.addEventListener("click", () => {
-        document.getElementById("inputShortName").value = "";
-        document.querySelectorAll(".add-consequence-inputs .hybrid-input").forEach(container => {
-          container.querySelector(".level-select").value = "";
-          const ti = container.querySelector(".level-text");
-          ti.value = ""; ti.hidden = true;
-        });
-        const noticeRow = document.querySelector(".add-consequence-notice");
-        if (noticeRow) noticeRow.hidden = true;
-      });
-    }
-
-    // ── Consequence space dialog ───────────────────────────────
-    const dialog   = document.getElementById("consequenceSpaceDialog");
-    const btnShow  = document.getElementById("btnShowConsequenceSpace");
-    const btnClose = document.getElementById("btnCloseDialog");
-
-    function getNamedLevelTuples() {
-      const named = new Map();
-      const tbody = document.getElementById("consequencesBody");
-      if (!tbody) return named;
-      tbody.querySelectorAll("tr").forEach(tr => {
-        const cells = Array.from(tr.querySelectorAll("td"));
-        if (cells.length < 2) return;
-        const shortName = cells[0].textContent.trim();
-        const key = JSON.stringify(cells.slice(1).map(td => td.textContent.trim()));
-        named.set(key, shortName);
-      });
-      return named;
-    }
-
-    async function openConsequenceSpaceDialog() {
-      const res = await fetch("/api/consequence_space");
-      if (!res.ok) { alert("Could not load consequence space."); return; }
-      const data = await res.json();
-
-      const headersRow = document.getElementById("consequenceSpaceHeaders");
-      headersRow.innerHTML = "";
-      // Prepend a "Name" column header
-      const nameTh = document.createElement("th");
-      nameTh.textContent = "Name";
-      headersRow.appendChild(nameTh);
-      data.headers.forEach(h => {
-        const th = document.createElement("th");
-        th.textContent = h;
-        headersRow.appendChild(th);
-      });
-
-      const tbody = document.getElementById("consequenceSpaceBody");
-      tbody.innerHTML = "";
-      const namedMap = getNamedLevelTuples();
-
-      data.rows.forEach(row => {
-        const tr = document.createElement("tr");
-        const key = JSON.stringify(row);
-        const shortName = namedMap.get(key) ?? "";
-        if (shortName) tr.classList.add("named-consequence");
-
-        // Short-name cell
-        const nameTd = document.createElement("td");
-        nameTd.textContent = shortName;
-        tr.appendChild(nameTd);
-
-        row.forEach(cell => {
-          const td = document.createElement("td");
-          td.textContent = cell;
-          tr.appendChild(td);
-        });
-
-        tr.addEventListener("click", () => {
-          data.headers.forEach((aspectName, i) => {
-            const container = document.querySelector(
-              `.hybrid-input[data-aspect="${CSS.escape(aspectName)}"]`
-            );
-            if (!container) return;
-            const select    = container.querySelector(".level-select");
-            const textInput = container.querySelector(".level-text");
-            const value     = row[i];
-            const exists    = Array.from(select.options).some(o => o.value === value);
-            if (exists) {
-              select.value = value;
-              textInput.hidden = true;
-            } else {
-              select.value = NEW_LEVEL_SENTINEL;
-              textInput.hidden = false;
-              textInput.value = value;
-            }
-          });
-          dialog.close();
-          document.getElementById("inputShortName").focus();
-        });
-
-        tbody.appendChild(tr);
-      });
-
-      dialog.showModal();
-    }
-
-    if (btnShow)  btnShow.addEventListener("click", openConsequenceSpaceDialog);
-    if (btnClose) btnClose.addEventListener("click", () => dialog.close());
-    if (dialog) {
-      dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
     }
 
     // ── Initial load ───────────────────────────────────────────

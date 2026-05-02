@@ -29,7 +29,7 @@ flask-pythonanywhere-test/
 │       ├── levels.css
 │       └── vdiff_matrix.css
 └── templates/
-    ├── index.html          "/" — project home, aspects summary, consequences
+    ├── index.html          "/" — read-only project overview: aspects summary (Name/type/description/#levels/#Δ), consequences list
     ├── aspects.html        "/aspects" — aspect table
     ├── aspect_detail.html  "/aspects/<name>" — levels, relations matrix, graph
     ├── consequences.html   "/consequences" — named consequences + comparison
@@ -406,7 +406,7 @@ Used on:
 - `.btn-stage-delete` — pale red, used on Delete buttons in the levels table and consequence rows; defined in `common.css`
 - Default — grey (`#f6f6f6`), matches `.header-link-button` exactly
 - `button:disabled` — opacity 0.45, cursor `not-allowed`; defined in `common.css`; applies to all pages
-- `.header-link-button` — `<a>` styled as a button (defined in `common.css`)
+- `.header-link-button` — `<a>` styled as a button (defined in `common.css`); has `display: inline-block` and `line-height: normal` so it renders identically to `<button>` in all layout contexts
 - The *Export project* button on `/` is a real `<button>` (not `<a>`); it downloads via `fetch()` + Blob URL so the progress bar can wrap the entire request
 
 ---
@@ -513,7 +513,7 @@ extra outer iterations are only needed when Phase 1 adds new entries that create
 
 - Consider incremental closure algorithm to reduce per-apply cost from O(n⁴) to O(n²) per relation
 
-- Transform the "/" view into a 'Project overview' view with no editing, to avoid different views with (partially) overlapping functionality
+- ~~Transform the "/" view into a 'Project overview' view with no editing, to avoid different views with (partially) overlapping functionality~~ Resolved: aspects table expanded to Name/Data type/Description/#Levels/#Δ; consequence space dialog and add-consequence form removed from "/".
 
 - Show collection of differences (special view?) and let the user set "undecided" differences as pos/non-neg/zero/non-pos/neg
 
