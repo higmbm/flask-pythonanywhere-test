@@ -168,8 +168,10 @@ td.editable-desc:empty::before {
 }
 /* ── Link styled as a button ────────────────────────────── */
 .header-link-button {
+  display: inline-block;
   padding: 0.45rem 0.8rem;
   font-size: 1rem;
+  line-height: normal;
   border: 1px solid #999;
   border-radius: 6px;
   background: #f6f6f6;
