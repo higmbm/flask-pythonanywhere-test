@@ -73,6 +73,19 @@ class Aspect:
             self.vdiffs.append(vd_inv)
         self.levels[level] = description
 
+    def change_type(self, new_type: Type) -> list:
+        """Change data_type if all existing levels are valid for new_type.
+        Returns list of level names that fail to parse (empty means success)."""
+        failing = []
+        for level in self.levels:
+            try:
+                parse_type(level, new_type)
+            except (ValueError, TypeError):
+                failing.append(level)
+        if not failing:
+            self.data_type = new_type
+        return failing
+
     def add_description(self, description: str):
         self.description = description
 
@@ -1838,7 +1851,8 @@ class EudoxaManager:
             ws.cell(row=row_index, column=1).value=short_name
             for col_index, aspect_name in enumerate(self.aspects.keys(), start=2):
                 aspect_type = self.aspects[aspect_name].data_type
-                level = parse_type(consequence[aspect_name], aspect_type)
+                level_str = consequence[aspect_name]
+                level = None if level_str is None else parse_type(level_str, aspect_type)
                 ws.cell(row=row_index, column=col_index).value=level
 
     def import_aspect_from_excel(self, aspect_name: str, filename: str):
