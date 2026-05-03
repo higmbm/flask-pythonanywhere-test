@@ -24,6 +24,15 @@ os.makedirs(_STORE_DIR, exist_ok=True)
 # -----------------------------------------------------------
 #  HELPERS
 # -----------------------------------------------------------
+_DTYPE_LABELS = {
+    "str":   "Categorical (text)",
+    "float": "Numerical (general)",
+    "int":   "Numerical (integer only)",
+}
+
+def dtype_label(type_name: str) -> str:
+    return _DTYPE_LABELS.get(type_name, type_name)
+
 def _store_path(sid: str) -> str:
     """Return the file path for a session's manager store."""
     safe = "".join(c for c in sid if c in "0123456789abcdef")
@@ -245,7 +254,7 @@ def aspects_html():
     # Build rows for the HTML table
     table_rows = []
     for name, aspect in aspects.items():
-        dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
+        dtype = dtype_label(getattr(aspect.data_type, "__name__", str(aspect.data_type)))
         n_levels = len(aspect.levels)
         n_vdiffs = len(aspect.vdiffs)
         table_rows.append({
@@ -268,6 +277,16 @@ def patch_aspect(aspect_name):
     data = request.get_json(silent=True) or {}
     if "description" in data:
         aspect.add_description(data["description"] or None)
+
+    if "data_type" in data:
+        new_type_str = data["data_type"]
+        if new_type_str not in ("str", "int", "float"):
+            return {"error": f"Unknown data type '{new_type_str}'"}, 400
+        new_type = eudoxa.str_to_type(new_type_str)
+        failing = aspect.change_type(new_type)
+        if failing:
+            quoted = ", ".join(f"'{lv}'" for lv in failing)
+            return {"error": f"Cannot change type: {quoted} cannot be parsed as '{new_type_str}'"}, 400
 
     save_manager(mgr)
     return {"message": "Aspect updated"}, 200
@@ -324,7 +343,7 @@ def list_aspects():
     for name, aspect in (mgr.aspects or {}).items():
 
         # Data type: convert Python type to str
-        dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
+        dtype = dtype_label(getattr(aspect.data_type, "__name__", str(aspect.data_type)))
 
         # List level names
         level_names = ", ".join(aspect.levels.keys())
@@ -352,7 +371,8 @@ def aspect_detail(aspect_name):
     if not aspect:
         abort(404, f"Aspect '{aspect_name}' not found")
 
-    dtype = getattr(aspect.data_type, "__name__", str(aspect.data_type))
+    dtype_raw = getattr(aspect.data_type, "__name__", "str")
+    dtype = dtype_label(dtype_raw)
 
     level_rows = []
     for level_name, description in aspect.levels.items():
@@ -365,6 +385,7 @@ def aspect_detail(aspect_name):
         "aspect_detail.html",
         aspect_name=aspect_name,
         dtype=dtype,
+        dtype_raw=dtype_raw,
         description=aspect.description or "",
         level_rows=level_rows
     )

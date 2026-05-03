@@ -19,12 +19,20 @@
     <dt>Aspect name:</dt>
     <dd>{{ aspect_name }}</dd>
     <dt>Type:</dt>
-    <dd>{{ dtype }}</dd>
+    <dd>
+      <select id="typeSelect">
+        <option value="str"   {% if dtype_raw == 'str'   %}selected{% endif %}>Categorical (text)</option>
+        <option value="int"   {% if dtype_raw == 'int'   %}selected{% endif %}>Numerical (integer only)</option>
+        <option value="float" {% if dtype_raw == 'float' %}selected{% endif %}>Numerical (general)</option>
+      </select>
+      <span id="typeFeedback"></span>
+    </dd>
     <dt>Description:</dt>
     <dd class="editable-desc"
         data-aspect="{{ aspect_name }}"
         title="Click to edit description">{{ description }}</dd>
   </dl>
+  <p id="typeError" class="feedback-error" hidden></p>
 
   <!-- ── Levels ──────────────────────────────────────────────── -->
   <h2>Levels</h2>
@@ -134,6 +142,46 @@
 
   <script>
     const ASPECT_NAME = document.getElementById("addLevelFeedback").dataset.aspect;
+
+    // ── Type change ──────────────────────────────────────────────
+    const typeSelect   = document.getElementById("typeSelect");
+    const typeFeedback = document.getElementById("typeFeedback");
+    const typeError    = document.getElementById("typeError");
+    let previousType   = typeSelect.value;
+    let dismissError   = null;
+
+    function showTypeError(msg) {
+      typeError.textContent = msg;
+      typeError.hidden = false;
+      if (dismissError) document.removeEventListener("click", dismissError);
+      dismissError = () => { typeError.hidden = true; dismissError = null; };
+      setTimeout(() => document.addEventListener("click", dismissError, { once: true }), 0);
+    }
+
+    typeSelect.addEventListener("change", async () => {
+      const newType = typeSelect.value;
+      typeFeedback.textContent = "";
+      typeError.hidden = true;
+      if (dismissError) { document.removeEventListener("click", dismissError); dismissError = null; }
+
+      const res = await fetch(`/api/aspects/${encodeURIComponent(ASPECT_NAME)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_type: newType })
+      });
+
+      if (res.ok) {
+        previousType = newType;
+        typeFeedback.textContent = "Type updated.";
+        typeFeedback.className = "feedback-ok";
+        setTimeout(() => { typeFeedback.textContent = ""; typeFeedback.className = ""; }, 3000);
+      } else {
+        typeSelect.value = previousType;
+        let msg = `${res.status} ${res.statusText}`;
+        try { const j = await res.json(); msg = j.error || msg; } catch {}
+        showTypeError(msg);
+      }
+    });
 
     // ── Inline description editing ───────────────────────────────
     const descDd = document.querySelector("dd.editable-desc");

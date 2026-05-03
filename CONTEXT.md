@@ -122,6 +122,10 @@ Aspect order in `|PROJ|` controls import order, which becomes `mgr.aspects` dict
 
 Import tracks `current_row_asp` to handle blank col B cells (continuation rows). Import accepts `◬` as the natural zero-diff label.
 
+### Aspect type change
+
+`Aspect.change_type(new_type: Type) -> list` validates all existing levels against `new_type` via `parse_type`. If all pass, sets `self.data_type` and returns `[]`; otherwise leaves `self.data_type` unchanged and returns the list of failing level names. Upcasts (e.g. `int`→`float`, anything→`str`) always return `[]`. Downcasts fail if any level cannot be parsed into the stricter type.
+
 ### Aspect name restrictions
 
 - Aspect names may **not** contain `|` (enforced in `add_aspect`), because `|` is used as separator in the `selPair` dropdown value encoding in `/vdiff-matrix`.
@@ -195,7 +199,7 @@ The vdcm is stored as a two-level JSON object mirroring the adjacency dict:
 | `GET` | `/api/aspects` | List aspects (table rows) |
 | `POST` | `/api/aspects` | Add aspect |
 | `PATCH` | `/api/aspects` | Reorder aspects |
-| `PATCH` | `/api/aspects/<name>` | Update description |
+| `PATCH` | `/api/aspects/<name>` | Update description or data type; `data_type` must be `"str"`, `"int"`, or `"float"`; rejected with 400 listing failing level names if any existing level cannot be parsed into the new type |
 | `GET` | `/api/aspect-names` | List aspect names only |
 | `GET` | `/api/aspects/<name>/levels` | List levels |
 | `POST` | `/api/aspects/<name>/levels` | Add level; raises 400 if level already exists |
@@ -234,6 +238,8 @@ The vdcm is stored as a two-level JSON object mirroring the adjacency dict:
 
 #### Formatting helpers
 
+`dtype_label(type_name)` maps internal type names to display labels: `"str"` → `"Categorical (text)"`, `"float"` → `"Numerical (general)"`, `"int"` → `"Numerical (integer only)"`. Used in all routes that pass `dtype` to templates or API responses. The `/aspects/<name>` route passes both `dtype` (display label) and `dtype_raw` (raw name `"str"`/`"int"`/`"float"`) to the template so the type dropdown can be pre-selected correctly.
+
 `_make_vd(asp, la, lb)`, `_fmt_tokens`, `_fmt_entry`, `_fmt_coll` are module-level helpers shared by `patch_vdiff_relation` and `batch_patch_vdiff_relations`. `_make_vd` normalises `la == lb == "*"` to a natural zero-diff VDiff.
 
 `_fmt_al_tokens`, `_fmt_al_origin`, `_fmt_al_entry`, `_fmt_al_coll` are the equivalent module-level helpers for aspect level relation endpoints (`patch_relation` and `batch_patch_relations`).
@@ -266,6 +272,10 @@ Both `/aspects/<name>` and `/consequences` show inline feedback after an add-for
 - The feedback element persists until the next form submission or *Clear* click.
 - In `aspect_detail.html` the element is `<p id="addLevelFeedback">` placed below the levels table.
 - In `consequences.html` the element is `<p id="addConsequenceFeedback">` inside the existing `.add-consequence-notice` tfoot row, which is shown/hidden by `showConsequenceFeedback()` / `hideConsequenceFeedback()`.
+
+### Type change (`/aspects/<name>`)
+
+The "Type:" row in the aspect summary `<dl>` is an inline `<select>` dropdown pre-selected on the current type. On change it immediately PATCHes `/api/aspects/<name>` with `{ data_type }`. Success shows `"Type updated."` in an inline `<span>` to the right of the dropdown; the message clears automatically after 3 seconds. Failure reverts the dropdown to its previous value and shows the error (including failing level names) in `<p id="typeError">` below the summary block; that element is dismissed by the next click anywhere on the page.
 
 ### Inference panels
 
@@ -545,4 +555,4 @@ extra outer iterations are only needed when Phase 1 adds new entries that create
 
 - Server-side logging
 
-- Change aspect data type to "categorical" (str) and "numerical" (float)
+- ~~Change aspect data type to "categorical" (str) and "numerical" (float)~~ Resolved differently: type names are displayed as "Categorical (text)" / "Numerical (general)" / "Numerical (integer only)" throughout the UI (internal representation and Excel format unchanged); `/aspects/<name>` supports upcast/downcast via an inline type dropdown with validation.
